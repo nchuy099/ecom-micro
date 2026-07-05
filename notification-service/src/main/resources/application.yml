@@ -1,0 +1,47 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: notification-service
+  datasource:
+    url: ${NOTIFICATION_DB_URL:jdbc:mysql://localhost:3306/notification_service}
+    username: ${NOTIFICATION_DB_USERNAME:ecom}
+    password: ${NOTIFICATION_DB_PASSWORD:ecom}
+  flyway:
+    enabled: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: notification-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        spring.json.trusted.packages: "com.nchuy099.ecommerce.*"
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+notification:
+  worker:
+    max-attempts: ${NOTIFICATION_MAX_ATTEMPTS:3}
+    backoff: ${NOTIFICATION_BACKOFF:25ms}
+  mock:
+    fail-campaign-ids: ${NOTIFICATION_FAIL_CAMPAIGN_IDS:}
+    fail-channels: ${NOTIFICATION_FAIL_CHANNELS:}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_DEFAULT_ZONE:http://localhost:8761/eureka/}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus

@@ -1,0 +1,81 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: order-service
+  datasource:
+    url: ${ORDER_DB_URL:jdbc:mysql://localhost:3306/order_service}
+    username: ${ORDER_DB_USERNAME:ecom}
+    password: ${ORDER_DB_PASSWORD:ecom}
+  flyway:
+    enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        spring.json.trusted.packages: "com.nchuy099.ecommerce.*"
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+services:
+  product:
+    url: ${PRODUCT_SERVICE_URL:http://localhost:8082}
+    connect-timeout-ms: ${PRODUCT_SERVICE_CONNECT_TIMEOUT_MS:3000}
+    read-timeout-ms: ${PRODUCT_SERVICE_READ_TIMEOUT_MS:5000}
+
+idempotency:
+  order-create:
+    completed-ttl: ${ORDER_IDEMPOTENCY_COMPLETED_TTL:24h}
+    processing-ttl: ${ORDER_IDEMPOTENCY_PROCESSING_TTL:60s}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_DEFAULT_ZONE:http://localhost:8761/eureka/}
+
+resilience4j:
+  bulkhead:
+    instances:
+      productService:
+        max-concurrent-calls: 10
+        max-wait-duration: 20ms
+  circuitbreaker:
+    circuit-breaker-aspect-order: 100
+    instances:
+      productService:
+        sliding-window-size: 5
+        minimum-number-of-calls: 3
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 5s
+        permitted-number-of-calls-in-half-open-state: 2
+        register-health-indicator: true
+        record-failure-predicate: com.nchuy099.ecommerce.order.client.resilience.ProductClientRecordFailurePredicate
+  retry:
+    retry-aspect-order: 200
+    instances:
+      productService:
+        max-attempts: 3
+        wait-duration: 100ms
+        retry-exception-predicate: com.nchuy099.ecommerce.order.client.resilience.ProductClientRetryPredicate
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics,circuitbreakers
+  health:
+    circuitbreakers:
+      enabled: true

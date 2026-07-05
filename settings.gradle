@@ -1,0 +1,10 @@
+rootProject.name = 'ecom-microservice'
+
+include 'common'
+include 'service-registry'
+include 'api-gateway'
+include 'auth-service'
+include 'user-service'
+include 'product-service'
+include 'order-service'
+include 'notification-service'
