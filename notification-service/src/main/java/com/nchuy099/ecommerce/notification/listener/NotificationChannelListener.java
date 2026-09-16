@@ -1,18 +1,16 @@
 package com.nchuy099.ecommerce.notification.listener;
 
-import com.nchuy099.ecommerce.common.event.KafkaTopics;
-import com.nchuy099.ecommerce.common.event.NotificationChannelRequestedEvent;
+import com.nchuy099.ecommerce.notification.event.KafkaTopics;
+import com.nchuy099.ecommerce.notification.event.NotificationChannelRequestedEvent;
 import com.nchuy099.ecommerce.notification.service.NotificationChannelWorkerService;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
+import lombok.RequiredArgsConstructor;
 
 @Component
+@RequiredArgsConstructor
 public class NotificationChannelListener {
     private final NotificationChannelWorkerService workerService;
-
-    public NotificationChannelListener(NotificationChannelWorkerService workerService) {
-        this.workerService = workerService;
-    }
 
     @KafkaListener(topics = KafkaTopics.NOTIFICATION_EMAIL_REQUESTED, groupId = "notification-email-worker")
     public void handleEmail(NotificationChannelRequestedEvent event) {

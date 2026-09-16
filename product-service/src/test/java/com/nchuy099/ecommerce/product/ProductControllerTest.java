@@ -24,12 +24,8 @@ import com.nchuy099.ecommerce.product.dto.CreateProductRequest;
 import com.nchuy099.ecommerce.product.dto.PageResponse;
 import com.nchuy099.ecommerce.product.dto.ProductResponse;
 import com.nchuy099.ecommerce.product.dto.ProductSearchRequest;
-import com.nchuy099.ecommerce.product.dto.StockQuantityRequest;
 import com.nchuy099.ecommerce.product.dto.UpdateProductRequest;
-import com.nchuy099.ecommerce.product.exception.DuplicateSkuException;
-import com.nchuy099.ecommerce.product.exception.InsufficientStockException;
-import com.nchuy099.ecommerce.product.exception.ProductNotFoundException;
-import com.nchuy099.ecommerce.product.exception.StockConflictException;
+import com.nchuy099.ecommerce.product.exception.BusinessException;
 import com.nchuy099.ecommerce.product.service.ProductService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -68,12 +64,10 @@ class ProductControllerTest {
     }
 
     @Test
-    void readsUpdatesDeletesSearchesReservesAndReleases() throws Exception {
+    void readsUpdatesAndDeletesProducts() throws Exception {
         when(productService.findById(1L)).thenReturn(productResponse(1L, "Laptop", "SKU-1", 5));
         when(productService.update(eq(1L), any())).thenReturn(productResponse(1L, "Laptop Pro", "SKU-1A", 8));
         when(productService.search(any())).thenReturn(PageResponse.of(List.of(productResponse(1L, "Laptop", "SKU-1", 5)), 0, 20, 1));
-        when(productService.reserve(eq(1L), any())).thenReturn(productResponse(1L, "Laptop", "SKU-1", 3));
-        when(productService.release(eq(1L), any())).thenReturn(productResponse(1L, "Laptop", "SKU-1", 4));
         doNothing().when(productService).delete(1L);
 
         mockMvc.perform(get("/v1/products/1"))
@@ -97,18 +91,6 @@ class ProductControllerTest {
                         .content(objectMapper.writeValueAsString(new ProductSearchRequest("lap", 10L, null, null, 0, 20))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalElements").value(1));
-
-        mockMvc.perform(post("/v1/products/1/reserve")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new StockQuantityRequest(2))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.stock").value(3));
-
-        mockMvc.perform(post("/v1/products/1/release")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new StockQuantityRequest(1))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.stock").value(4));
 
         mockMvc.perform(delete("/v1/products/1"))
                 .andExpect(status().isNoContent())
@@ -135,10 +117,10 @@ class ProductControllerTest {
 
     @Test
     void returnsProblemDetailForDomainErrors() throws Exception {
-        when(productService.findById(99L)).thenThrow(new ProductNotFoundException(99L));
-        when(productService.create(any())).thenThrow(new DuplicateSkuException());
-        when(productService.reserve(eq(1L), any())).thenThrow(new InsufficientStockException(1L, 2, 1));
-        when(productService.release(eq(1L), any())).thenThrow(new StockConflictException(1L));
+        when(productService.findById(99L)).thenThrow(BusinessException.notFound(
+                "https://errors.ecom.local/product-not-found", "Product not found", "Product not found: 99"));
+        when(productService.create(any())).thenThrow(BusinessException.conflict(
+                "https://errors.ecom.local/duplicate-sku", "Duplicate SKU", "Product SKU already exists"));
 
         mockMvc.perform(get("/v1/products/99"))
                 .andExpect(status().isNotFound())
@@ -156,17 +138,6 @@ class ProductControllerTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.title").value("Duplicate SKU"));
 
-        mockMvc.perform(post("/v1/products/1/reserve")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new StockQuantityRequest(2))))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.title").value("Insufficient stock"));
-
-        mockMvc.perform(post("/v1/products/1/release")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new StockQuantityRequest(1))))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.title").value("Stock conflict"));
     }
 
     private static ProductResponse productResponse(Long id, String name, String sku, int stock) {

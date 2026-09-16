@@ -11,9 +11,9 @@ import java.time.Duration;
 import java.util.Optional;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.nchuy099.ecommerce.common.event.NotificationChannel;
-import com.nchuy099.ecommerce.common.event.NotificationChannelRequestedEvent;
-import com.nchuy099.ecommerce.common.event.NotificationRequestedEvent;
+import com.nchuy099.ecommerce.notification.event.NotificationChannel;
+import com.nchuy099.ecommerce.notification.event.NotificationChannelRequestedEvent;
+import com.nchuy099.ecommerce.notification.event.NotificationRequestedEvent;
 import com.nchuy099.ecommerce.notification.config.NotificationProperties;
 import com.nchuy099.ecommerce.notification.entity.NotificationDeliveryEntity;
 import com.nchuy099.ecommerce.notification.entity.NotificationDeliveryStatus;

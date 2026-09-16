@@ -1,9 +1,10 @@
-server:
-  port: 8282
-
 spring:
   application:
     name: api-gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
   security:
     oauth2:
       resourceserver:
@@ -24,15 +25,15 @@ spring:
                   args:
                     regexp: /api/auth/login
                     replacement: "/realms/ecom/protocol/openid-connect/token"
-            - id: user-service
-              uri: lb://user-service
+            - id: auth-service
+              uri: lb://auth-service
               predicates:
                 - Path=/api/users/**
               filters:
                 - name: RewritePath
                   args:
                     regexp: /api/users(?<segment>/?.*)
-                    replacement: "/v1/users$\\{segment}"
+                    replacement: /v1/users$\{segment}
             - id: product-service
               uri: lb://product-service
               predicates:
@@ -41,7 +42,7 @@ spring:
                 - name: RewritePath
                   args:
                     regexp: /api/products(?<segment>/?.*)
-                    replacement: "/v1/products$\\{segment}"
+                    replacement: /v1/products$\{segment}
             - id: order-service
               uri: lb://order-service
               predicates:
@@ -50,7 +51,7 @@ spring:
                 - name: RewritePath
                   args:
                     regexp: /api/orders(?<segment>/?.*)
-                    replacement: "/v1/orders$\\{segment}"
+                    replacement: /v1/orders$\{segment}
             - id: flashsale-service
               uri: lb://order-service
               predicates:
@@ -59,12 +60,15 @@ spring:
                 - name: RewritePath
                   args:
                     regexp: /api/flashsale(?<segment>/?.*)
-                    replacement: "/v1/flashsale$\\{segment}"
+                    replacement: /v1/flashsale$\{segment}
 
 eureka:
   client:
     service-url:
       defaultZone: ${EUREKA_DEFAULT_ZONE:http://localhost:8761/eureka/}
+
+server:
+  port: 8282
 
 rate-limit:
   login:

@@ -3,48 +3,55 @@ package com.nchuy099.ecommerce.order.service;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
-import com.nchuy099.ecommerce.common.event.OrderCancelledEvent;
-import com.nchuy099.ecommerce.common.event.OrderCreatedEvent;
-import com.nchuy099.ecommerce.common.event.OrderItemRequested;
-import com.nchuy099.ecommerce.common.event.PaymentCompletedEvent;
-import com.nchuy099.ecommerce.common.event.PaymentFailedEvent;
-import com.nchuy099.ecommerce.common.event.StockReservationFailedEvent;
-import com.nchuy099.ecommerce.common.event.StockReservedEvent;
-import com.nchuy099.ecommerce.common.event.StockReservedItem;
 import com.nchuy099.ecommerce.order.dto.CreateOrderRequest;
 import com.nchuy099.ecommerce.order.dto.OrderItemRequest;
 import com.nchuy099.ecommerce.order.dto.OrderResponse;
 import com.nchuy099.ecommerce.order.dto.PageResponse;
+import com.nchuy099.ecommerce.order.client.ProductClient;
+import com.nchuy099.ecommerce.order.client.dto.ProductClientResponse;
 import com.nchuy099.ecommerce.order.entity.OrderEntity;
 import com.nchuy099.ecommerce.order.entity.OrderItemEntity;
 import com.nchuy099.ecommerce.order.entity.OrderStatus;
-import com.nchuy099.ecommerce.order.exception.OrderNotFoundException;
-import com.nchuy099.ecommerce.order.exception.OrderStateConflictException;
+import com.nchuy099.ecommerce.order.exception.BusinessException;
 import com.nchuy099.ecommerce.order.repository.OrderRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.nchuy099.ecommerce.order.pagination.OrderCursor;
+import com.nchuy099.ecommerce.order.notification.OrderNotificationPublisher;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Slf4j
 public class OrderService {
-    private static final Logger log = LoggerFactory.getLogger(OrderService.class);
 
     private final OrderRepository orderRepository;
-    private final OutboxEventService outboxEventService;
-    private final ProcessedEventService processedEventService;
+    private final ProductClient productClient;
+    private final OrderNotificationPublisher notificationPublisher;
 
-    public OrderService(OrderRepository orderRepository, OutboxEventService outboxEventService, ProcessedEventService processedEventService) {
+    @Autowired
+    public OrderService(OrderRepository orderRepository, ProductClient productClient,
+                        OrderNotificationPublisher notificationPublisher) {
         this.orderRepository = orderRepository;
-        this.outboxEventService = outboxEventService;
-        this.processedEventService = processedEventService;
+        this.productClient = productClient;
+        this.notificationPublisher = notificationPublisher;
+    }
+
+    // Keeps focused unit tests independent from Kafka while Spring uses the producer-backed constructor.
+    public OrderService(OrderRepository orderRepository, ProductClient productClient) {
+        this(orderRepository, productClient, OrderNotificationPublisher.noop());
     }
 
     @Transactional
     public OrderResponse create(CreateOrderRequest request) {
+        validateDistinctProducts(request);
         String orderNumber = "ORD-" + System.currentTimeMillis() + "-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
         OrderEntity order = new OrderEntity(orderNumber, request.userId(), OrderStatus.PENDING, BigDecimal.ZERO);
 
@@ -53,103 +60,140 @@ public class OrderService {
         }
 
         OrderEntity savedOrder = orderRepository.saveAndFlush(order);
-        List<OrderItemRequested> requestedItems = request.items().stream()
-                .map(item -> new OrderItemRequested(item.productId(), item.quantity()))
-                .toList();
-        outboxEventService.writeOrderCreated(OrderCreatedEvent.of(savedOrder.getId(), savedOrder.getUserId(), requestedItems));
+        try {
+            BigDecimal total = BigDecimal.ZERO;
+            List<OrderItemRequest> itemsByProduct = request.items().stream()
+                    .sorted(java.util.Comparator.comparing(OrderItemRequest::productId))
+                    .toList();
 
-        return OrderResponse.from(savedOrder);
+            for (OrderItemRequest item : itemsByProduct) {
+                ProductClientResponse product = productClient.reserveStockForOrder(
+                        savedOrder.getId(),
+                        savedOrder.getUserId(),
+                        item.productId(),
+                        item.quantity()
+                );
+                BigDecimal subtotal = product.price().multiply(BigDecimal.valueOf(item.quantity()));
+                savedOrder.findItem(item.productId()).applyReservedPrice(product.name(), product.price(), subtotal);
+                total = total.add(subtotal);
+            }
+
+            savedOrder.setTotalAmount(total);
+            savedOrder.setStatus(OrderStatus.CONFIRMED);
+            OrderEntity confirmedOrder = orderRepository.saveAndFlush(savedOrder);
+            notificationPublisher.publishOrderConfirmed(
+                    confirmedOrder.getId(),
+                    confirmedOrder.getUserId(),
+                    confirmedOrder.getOrderNumber(),
+                    "Your order " + confirmedOrder.getOrderNumber() + " has been confirmed."
+            );
+            return OrderResponse.from(confirmedOrder);
+        } catch (RuntimeException ex) {
+            try {
+                productClient.releaseOrderStock(savedOrder.getId());
+            } catch (RuntimeException compensationFailure) {
+                log.error("Failed to release product reservations for order {} after create failure", savedOrder.getId(), compensationFailure);
+                ex.addSuppressed(compensationFailure);
+            }
+            throw ex;
+        }
+    }
+
+    private static void validateDistinctProducts(CreateOrderRequest request) {
+        long uniqueProductCount = request.items().stream()
+                .map(OrderItemRequest::productId)
+                .distinct()
+                .count();
+        if (uniqueProductCount != request.items().size()) {
+            throw BusinessException.badRequest(
+                    "https://errors.ecom.local/invalid-pagination",
+                    "Invalid pagination request",
+                    "Order cannot contain duplicate products"
+            );
+        }
     }
 
     @Transactional(readOnly = true)
     public OrderResponse findById(Long id) {
         OrderEntity order = orderRepository.findById(id)
-                .orElseThrow(() -> new OrderNotFoundException(id));
+                .orElseThrow(() -> orderNotFound(id));
         return OrderResponse.from(order);
     }
 
     @Transactional(readOnly = true)
     public PageResponse<OrderResponse> findByUserId(Long userId, Pageable pageable) {
-        Page<OrderEntity> page = orderRepository.findByUserId(userId, pageable);
-        List<OrderResponse> content = page.getContent().stream()
+        Page<Long> page = orderRepository.findIdsByUserId(userId, pageable);
+        List<OrderResponse> content = loadInRequestedOrder(page.getContent()).stream()
                 .map(OrderResponse::from)
                 .toList();
         return PageResponse.of(content, page.getNumber(), page.getSize(), page.getTotalElements());
     }
 
+    @Transactional(readOnly = true)
+    public PageResponse<OrderResponse> findByUserIdCursor(Long userId, String cursor, int size) {
+        int requestedSize = Math.min(Math.max(size, 1), 100);
+        List<Long> ids;
+        if (cursor == null || cursor.isBlank()) {
+            ids = orderRepository.findIdsByUserIdOrderByCreatedAtDesc(
+                    userId,
+                    PageRequest.of(0, requestedSize + 1)
+            );
+        } else {
+            OrderCursor decoded = OrderCursor.decode(cursor);
+            ids = orderRepository.findIdsByUserIdAfterCursor(
+                    userId,
+                    decoded.createdAt(),
+                    decoded.id(),
+                    PageRequest.of(0, requestedSize + 1)
+            );
+        }
+
+        boolean hasNext = ids.size() > requestedSize;
+        List<Long> pageIds = ids.stream().limit(requestedSize).toList();
+        List<OrderEntity> entities = loadInRequestedOrder(pageIds);
+        String nextCursor = hasNext && !entities.isEmpty()
+                ? OrderCursor.encode(entities.get(entities.size() - 1).getCreatedAt(), entities.get(entities.size() - 1).getId())
+                : null;
+        return PageResponse.cursor(
+                entities.stream().map(OrderResponse::from).toList(),
+                requestedSize,
+                nextCursor,
+                hasNext
+        );
+    }
+
+    private List<OrderEntity> loadInRequestedOrder(List<Long> ids) {
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, OrderEntity> byId = orderRepository.findAllWithItemsByIdIn(ids).stream()
+                .collect(Collectors.toMap(OrderEntity::getId, Function.identity()));
+        return ids.stream().map(byId::get).filter(java.util.Objects::nonNull).toList();
+    }
+
     @Transactional
     public OrderResponse cancel(Long id) {
         OrderEntity order = orderRepository.findById(id)
-                .orElseThrow(() -> new OrderNotFoundException(id));
+                .orElseThrow(() -> orderNotFound(id));
 
         if (order.getStatus() != OrderStatus.CONFIRMED) {
-            throw new OrderStateConflictException("Cannot cancel order with status " + order.getStatus());
+            throw BusinessException.conflict(
+                    "https://errors.ecom.local/order-conflict",
+                    "Order state conflict",
+                    "Cannot cancel order with status " + order.getStatus()
+            );
         }
 
+        productClient.releaseOrderStock(id);
         order.setStatus(OrderStatus.CANCELLED);
-        OrderEntity updatedOrder = orderRepository.saveAndFlush(order);
-        outboxEventService.writeOrderCancelled(OrderCancelledEvent.of(updatedOrder.getId(), updatedOrder.getUserId()));
-
-        return OrderResponse.from(updatedOrder);
+        return OrderResponse.from(orderRepository.saveAndFlush(order));
     }
 
-    @Transactional
-    public boolean applyStockReserved(StockReservedEvent event) {
-        return processedEventService.processOnce(event.eventId(), event.eventType(), () -> {
-            OrderEntity order = orderRepository.findById(event.orderId())
-                    .orElseThrow(() -> new OrderNotFoundException(event.orderId()));
-            if (order.getStatus() != OrderStatus.PENDING) {
-                log.info("Ignoring stock.reserved for order {} with status {}", order.getId(), order.getStatus());
-                return true;
-            }
-            for (StockReservedItem item : event.items()) {
-                order.findItem(item.productId()).applyReservedPrice(item.productName(), item.unitPrice(), item.subtotal());
-            }
-            order.setTotalAmount(event.totalAmount());
-            orderRepository.saveAndFlush(order);
-            return true;
-        });
-    }
-
-    @Transactional
-    public boolean applyPaymentCompleted(PaymentCompletedEvent event) {
-        return processedEventService.processOnce(event.eventId(), event.eventType(), () -> {
-            OrderEntity order = orderRepository.findById(event.orderId())
-                    .orElseThrow(() -> new OrderNotFoundException(event.orderId()));
-            if (order.getStatus() == OrderStatus.CANCELLED || order.getStatus() == OrderStatus.FAILED) {
-                return true;
-            }
-            order.setStatus(OrderStatus.CONFIRMED);
-            orderRepository.saveAndFlush(order);
-            return true;
-        });
-    }
-
-    @Transactional
-    public boolean applyPaymentFailed(PaymentFailedEvent event) {
-        return processedEventService.processOnce(event.eventId(), event.eventType(), () -> {
-            OrderEntity order = orderRepository.findById(event.orderId())
-                    .orElseThrow(() -> new OrderNotFoundException(event.orderId()));
-            if (order.getStatus() == OrderStatus.CANCELLED) {
-                return true;
-            }
-            order.setStatus(OrderStatus.CANCELLED);
-            OrderEntity updatedOrder = orderRepository.saveAndFlush(order);
-            outboxEventService.writeOrderCancelled(OrderCancelledEvent.of(updatedOrder.getId(), updatedOrder.getUserId()));
-            return true;
-        });
-    }
-
-    @Transactional
-    public boolean applyStockReservationFailed(StockReservationFailedEvent event) {
-        return processedEventService.processOnce(event.eventId(), event.eventType(), () -> {
-            OrderEntity order = orderRepository.findById(event.orderId())
-                    .orElseThrow(() -> new OrderNotFoundException(event.orderId()));
-            if (order.getStatus() == OrderStatus.PENDING) {
-                order.setStatus(OrderStatus.FAILED);
-                orderRepository.saveAndFlush(order);
-            }
-            return true;
-        });
+    private static BusinessException orderNotFound(Long id) {
+        return BusinessException.notFound(
+                "https://errors.ecom.local/order-not-found",
+                "Order not found",
+                "Order not found with id: " + id
+        );
     }
 }

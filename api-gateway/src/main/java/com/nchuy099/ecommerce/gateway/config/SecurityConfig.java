@@ -6,16 +6,14 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.web.server.SecurityWebFilterChain;
+import lombok.RequiredArgsConstructor;
 
 @Configuration
 @EnableWebFluxSecurity
+@RequiredArgsConstructor
 public class SecurityConfig {
 
     private final JwtAuthConverter jwtAuthConverter;
-
-    public SecurityConfig(JwtAuthConverter jwtAuthConverter) {
-        this.jwtAuthConverter = jwtAuthConverter;
-    }
 
     @Bean
     public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http) {
@@ -25,6 +23,7 @@ public class SecurityConfig {
                         .pathMatchers("/actuator/health", "/actuator/info").permitAll()
                         .pathMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .pathMatchers(HttpMethod.POST, "/api/products/search").permitAll()
+                        .pathMatchers(HttpMethod.POST, "/api/products/search/reindex").hasRole("ADMIN")
                         .pathMatchers(HttpMethod.GET, "/api/products/**").permitAll()
                         .pathMatchers(HttpMethod.POST, "/api/products").hasAnyRole("SELLER", "ADMIN")
                         .pathMatchers(HttpMethod.POST, "/api/products/**").hasAnyRole("SELLER", "ADMIN")

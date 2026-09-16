@@ -5,9 +5,9 @@ import java.util.function.Supplier;
 
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.nchuy099.ecommerce.common.ApiResponse;
+import com.nchuy099.ecommerce.order.api.ApiResponse;
 import com.nchuy099.ecommerce.order.dto.OrderResponse;
-import com.nchuy099.ecommerce.order.exception.IdempotencyInProgressException;
+import com.nchuy099.ecommerce.order.exception.BusinessException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -57,7 +57,12 @@ public class OrderIdempotencyService {
         if (current != null && current.state() == IdempotencyState.COMPLETED && current.response() != null) {
             return current.response();
         }
-        throw new IdempotencyInProgressException(Math.max(1, processingTtl.toSeconds()));
+        throw BusinessException.conflict(
+                        "https://errors.ecom.local/idempotency-in-progress",
+                        "Idempotency key is processing",
+                        "A request with the same Idempotency-Key is still processing"
+                )
+                .withProperty("retryAfterSeconds", Math.max(1, processingTtl.toSeconds()));
     }
 
     private IdempotencyRecord readRecord(String key) {

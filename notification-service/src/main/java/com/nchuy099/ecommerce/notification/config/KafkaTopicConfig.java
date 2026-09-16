@@ -1,6 +1,6 @@
 package com.nchuy099.ecommerce.notification.config;
 
-import com.nchuy099.ecommerce.common.event.KafkaTopics;
+import com.nchuy099.ecommerce.notification.event.KafkaTopics;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;

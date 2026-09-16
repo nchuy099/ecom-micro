@@ -15,7 +15,7 @@ import java.time.Instant;
 import java.util.List;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.nchuy099.ecommerce.common.ApiResponse;
+import com.nchuy099.ecommerce.order.api.ApiResponse;
 import com.nchuy099.ecommerce.order.controller.OrderController;
 import com.nchuy099.ecommerce.order.dto.CreateOrderRequest;
 import com.nchuy099.ecommerce.order.dto.OrderItemRequest;
@@ -23,8 +23,7 @@ import com.nchuy099.ecommerce.order.dto.OrderItemResponse;
 import com.nchuy099.ecommerce.order.dto.OrderResponse;
 import com.nchuy099.ecommerce.order.dto.PageResponse;
 import com.nchuy099.ecommerce.order.entity.OrderStatus;
-import com.nchuy099.ecommerce.order.exception.OrderNotFoundException;
-import com.nchuy099.ecommerce.order.exception.OrderStateConflictException;
+import com.nchuy099.ecommerce.order.exception.BusinessException;
 import com.nchuy099.ecommerce.order.exception.ProductReservationException;
 import com.nchuy099.ecommerce.order.idempotency.OrderIdempotencyService;
 import com.nchuy099.ecommerce.order.service.OrderService;
@@ -52,7 +51,7 @@ class OrderControllerTest {
 
     @Test
     void createsOrder() throws Exception {
-        OrderResponse response = orderResponse(1L, "ORD-12345", 100L, OrderStatus.PENDING);
+        OrderResponse response = orderResponse(1L, "ORD-12345", 100L, OrderStatus.CONFIRMED);
         when(orderService.create(any())).thenReturn(response);
 
         mockMvc.perform(post("/v1/orders")
@@ -64,12 +63,12 @@ class OrderControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.id").value(1))
                 .andExpect(jsonPath("$.data.orderNumber").value("ORD-12345"))
-                .andExpect(jsonPath("$.data.status").value("PENDING"));
+                .andExpect(jsonPath("$.data.status").value("CONFIRMED"));
     }
 
     @Test
     void createsOrderWithIdempotencyKey() throws Exception {
-        OrderResponse response = orderResponse(1L, "ORD-12345", 100L, OrderStatus.PENDING);
+        OrderResponse response = orderResponse(1L, "ORD-12345", 100L, OrderStatus.CONFIRMED);
         when(orderIdempotencyService.executeCreateOrder(eq("100"), eq("idem-123"), any())).thenReturn(ApiResponse.of(response));
 
         mockMvc.perform(post("/v1/orders")
@@ -134,8 +133,10 @@ class OrderControllerTest {
 
     @Test
     void returnsProblemDetailForDomainErrors() throws Exception {
-        when(orderService.findById(99L)).thenThrow(new OrderNotFoundException(99L));
-        when(orderService.cancel(99L)).thenThrow(new OrderStateConflictException("Cannot cancel order with status CANCELLED"));
+        when(orderService.findById(99L)).thenThrow(BusinessException.notFound(
+                "https://errors.ecom.local/order-not-found", "Order not found", "Order not found with id: 99"));
+        when(orderService.cancel(99L)).thenThrow(BusinessException.conflict(
+                "https://errors.ecom.local/order-conflict", "Order state conflict", "Cannot cancel order with status CANCELLED"));
         when(orderService.create(any())).thenThrow(new ProductReservationException("Insufficient stock", HttpStatus.CONFLICT));
 
         mockMvc.perform(get("/v1/orders/99"))

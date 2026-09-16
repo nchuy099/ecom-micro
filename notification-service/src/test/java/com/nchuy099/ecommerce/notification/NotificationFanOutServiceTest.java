@@ -6,8 +6,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.nchuy099.ecommerce.common.event.NotificationChannel;
-import com.nchuy099.ecommerce.common.event.NotificationRequestedEvent;
+import com.nchuy099.ecommerce.notification.event.NotificationChannel;
+import com.nchuy099.ecommerce.notification.event.NotificationRequestedEvent;
 import com.nchuy099.ecommerce.notification.entity.NotificationDeliveryEntity;
 import com.nchuy099.ecommerce.notification.publisher.NotificationEventPublisher;
 import com.nchuy099.ecommerce.notification.repository.NotificationDeliveryRepository;

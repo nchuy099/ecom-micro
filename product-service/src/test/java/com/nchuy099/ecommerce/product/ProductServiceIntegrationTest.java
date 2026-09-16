@@ -4,25 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
-import java.util.List;
 
-import com.nchuy099.ecommerce.common.event.KafkaTopics;
-import com.nchuy099.ecommerce.common.event.OrderCancelledEvent;
-import com.nchuy099.ecommerce.common.event.OrderCreatedEvent;
-import com.nchuy099.ecommerce.common.event.OrderItemRequested;
 import com.nchuy099.ecommerce.product.dto.CreateProductRequest;
+import com.nchuy099.ecommerce.product.dto.OrderStockReservationRequest;
 import com.nchuy099.ecommerce.product.dto.PageResponse;
 import com.nchuy099.ecommerce.product.dto.ProductResponse;
 import com.nchuy099.ecommerce.product.dto.ProductSearchRequest;
-import com.nchuy099.ecommerce.product.dto.StockQuantityRequest;
 import com.nchuy099.ecommerce.product.dto.UpdateProductRequest;
 import com.nchuy099.ecommerce.product.entity.ProductEntity;
-import com.nchuy099.ecommerce.product.exception.DuplicateSkuException;
-import com.nchuy099.ecommerce.product.exception.InsufficientStockException;
-import com.nchuy099.ecommerce.product.exception.InvalidPriceRangeException;
-import com.nchuy099.ecommerce.product.exception.ProductNotFoundException;
-import com.nchuy099.ecommerce.product.repository.OutboxEventRepository;
-import com.nchuy099.ecommerce.product.repository.ProcessedEventRepository;
+import com.nchuy099.ecommerce.product.exception.BusinessException;
 import com.nchuy099.ecommerce.product.repository.ProductRepository;
 import com.nchuy099.ecommerce.product.repository.StockReservationRepository;
 import com.nchuy099.ecommerce.product.service.ProductService;
@@ -43,8 +33,7 @@ import org.springframework.transaction.support.TransactionTemplate;
         "spring.datasource.username=sa",
         "spring.datasource.password=",
         "eureka.client.enabled=false",
-        "spring.kafka.listener.auto-startup=false",
-        "ecommerce.kafka.topics.enabled=false"
+        "ecommerce.search.backend=jpa"
 })
 class ProductServiceIntegrationTest {
     @Autowired
@@ -52,12 +41,6 @@ class ProductServiceIntegrationTest {
 
     @Autowired
     private ProductRepository productRepository;
-
-    @Autowired
-    private OutboxEventRepository outboxEventRepository;
-
-    @Autowired
-    private ProcessedEventRepository processedEventRepository;
 
     @Autowired
     private StockReservationRepository stockReservationRepository;
@@ -71,8 +54,6 @@ class ProductServiceIntegrationTest {
     @BeforeEach
     void cleanDatabase() {
         stockReservationRepository.deleteAll();
-        processedEventRepository.deleteAll();
-        outboxEventRepository.deleteAll();
         productRepository.deleteAll();
     }
 
@@ -108,7 +89,7 @@ class ProductServiceIntegrationTest {
         assertThat(updated.sku()).isEqualTo("SKU-2A");
         assertThat(updated.stock()).isEqualTo(12);
         assertThatThrownBy(() -> productService.findById(created.id()))
-                .isInstanceOf(ProductNotFoundException.class);
+                .isInstanceOf(BusinessException.class);
     }
 
     @Test
@@ -116,7 +97,7 @@ class ProductServiceIntegrationTest {
         createProduct("Keyboard", "DUP-1", "30.00", 3, null);
 
         assertThatThrownBy(() -> createProduct("Keyboard 2", "DUP-1", "40.00", 4, null))
-                .isInstanceOf(DuplicateSkuException.class);
+                .isInstanceOf(BusinessException.class);
     }
 
     @Test
@@ -148,27 +129,24 @@ class ProductServiceIntegrationTest {
                 new BigDecimal("10.00"),
                 0,
                 10
-        ))).isInstanceOf(InvalidPriceRangeException.class);
+        ))).isInstanceOf(BusinessException.class);
     }
 
     @Test
-    void reservesAndReleasesStock() {
-        ProductResponse created = createProduct("Monitor", "SKU-3", "300.00", 5, null);
+    void synchronouslyReservesStockWithProductLockAndIsIdempotent() {
+        ProductResponse created = createProduct("Locked", "LOCK-1", "99.00", 5, null);
+        OrderStockReservationRequest request = new OrderStockReservationRequest(7000L, 2000L, 2);
 
-        ProductResponse reserved = productService.reserve(created.id(), new StockQuantityRequest(2));
-        ProductResponse released = productService.release(created.id(), new StockQuantityRequest(1));
+        ProductResponse first = productService.reserveForOrder(created.id(), request);
+        ProductResponse retry = productService.reserveForOrder(created.id(), request);
 
-        assertThat(reserved.stock()).isEqualTo(3);
-        assertThat(released.stock()).isEqualTo(4);
-    }
-
-    @Test
-    void rejectsReserveWhenStockIsInsufficient() {
-        ProductResponse created = createProduct("Cable", "SKU-4", "5.00", 1, null);
-
-        assertThatThrownBy(() -> productService.reserve(created.id(), new StockQuantityRequest(2)))
-                .isInstanceOf(InsufficientStockException.class);
-        assertThat(productService.findById(created.id()).stock()).isEqualTo(1);
+        assertThat(first.stock()).isEqualTo(3);
+        assertThat(retry.stock()).isEqualTo(3);
+        assertThat(productService.findById(created.id()).stock()).isEqualTo(3);
+        assertThat(stockReservationRepository.findByOrderIdAndReleasedFalse(7000L))
+                .singleElement()
+                .extracting(com.nchuy099.ecommerce.product.entity.StockReservationEntity::getQuantity)
+                .isEqualTo(2);
     }
 
     @Test
@@ -179,82 +157,6 @@ class ProductServiceIntegrationTest {
                 .isInstanceOf(OptimisticLockException.class);
 
         assertThat(productService.findById(created.id()).stock()).isEqualTo(0);
-    }
-
-    @Test
-    void orderCreatedReservesStockAndWritesStockReservedOutbox() {
-        ProductResponse product = createProduct("Phone", "SAGA-1", "500.00", 5, null);
-        OrderCreatedEvent event = OrderCreatedEvent.of(
-                1000L,
-                2000L,
-                List.of(new OrderItemRequested(product.id(), 2))
-        );
-
-        productService.reserveForOrder(event);
-
-        assertThat(productService.findById(product.id()).stock()).isEqualTo(3);
-        assertThat(stockReservationRepository.findByOrderIdAndReleasedFalse(1000L)).hasSize(1);
-        assertThat(outboxEventRepository.findAll())
-                .extracting(com.nchuy099.ecommerce.product.entity.OutboxEventEntity::getType)
-                .containsExactly(KafkaTopics.STOCK_RESERVED);
-    }
-
-    @Test
-    void duplicateOrderCreatedDoesNotReserveStockTwice() {
-        ProductResponse product = createProduct("Phone", "SAGA-2", "500.00", 5, null);
-        OrderCreatedEvent event = OrderCreatedEvent.of(
-                1000L,
-                2000L,
-                List.of(new OrderItemRequested(product.id(), 2))
-        );
-
-        productService.reserveForOrder(event);
-        productService.reserveForOrder(event);
-
-        assertThat(productService.findById(product.id()).stock()).isEqualTo(3);
-        assertThat(stockReservationRepository.findByOrderIdAndReleasedFalse(1000L)).hasSize(1);
-        assertThat(outboxEventRepository.findAll())
-                .extracting(com.nchuy099.ecommerce.product.entity.OutboxEventEntity::getType)
-                .containsExactly(KafkaTopics.STOCK_RESERVED);
-    }
-
-    @Test
-    void insufficientStockWritesReservationFailedWithoutPartialReserve() {
-        ProductResponse product = createProduct("Phone", "SAGA-3", "500.00", 1, null);
-        OrderCreatedEvent event = OrderCreatedEvent.of(
-                1000L,
-                2000L,
-                List.of(new OrderItemRequested(product.id(), 2))
-        );
-
-        productService.reserveForOrder(event);
-
-        assertThat(productService.findById(product.id()).stock()).isEqualTo(1);
-        assertThat(stockReservationRepository.findByOrderIdAndReleasedFalse(1000L)).isEmpty();
-        assertThat(outboxEventRepository.findAll())
-                .extracting(com.nchuy099.ecommerce.product.entity.OutboxEventEntity::getType)
-                .containsExactly(KafkaTopics.STOCK_RESERVATION_FAILED);
-    }
-
-    @Test
-    void orderCancelledReleasesReservedStockOnce() {
-        ProductResponse product = createProduct("Phone", "SAGA-4", "500.00", 5, null);
-        OrderCreatedEvent createdEvent = OrderCreatedEvent.of(
-                1000L,
-                2000L,
-                List.of(new OrderItemRequested(product.id(), 2))
-        );
-        productService.reserveForOrder(createdEvent);
-
-        OrderCancelledEvent cancelledEvent = OrderCancelledEvent.of(1000L, 2000L);
-        productService.releaseForOrder(cancelledEvent);
-        productService.releaseForOrder(cancelledEvent);
-
-        assertThat(productService.findById(product.id()).stock()).isEqualTo(5);
-        assertThat(stockReservationRepository.findByOrderIdAndReleasedFalse(1000L)).isEmpty();
-        assertThat(outboxEventRepository.findAll())
-                .extracting(com.nchuy099.ecommerce.product.entity.OutboxEventEntity::getType)
-                .containsExactly(KafkaTopics.STOCK_RESERVED, KafkaTopics.STOCK_RELEASED);
     }
 
     private void simulateTwoConcurrentReserves(Long productId) {

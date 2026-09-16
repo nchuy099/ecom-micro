@@ -8,10 +8,10 @@ import com.nchuy099.ecommerce.product.dto.UpdateProductRequest;
 import com.nchuy099.ecommerce.product.entity.ProductEntity;
 import com.nchuy099.ecommerce.product.repository.ProductRepository;
 import com.nchuy099.ecommerce.product.repository.StockReservationRepository;
-import com.nchuy099.ecommerce.product.service.OutboxEventService;
-import com.nchuy099.ecommerce.product.service.ProcessedEventService;
 import com.nchuy099.ecommerce.product.service.ProductCacheService;
 import com.nchuy099.ecommerce.product.service.ProductService;
+import com.nchuy099.ecommerce.product.search.ProductSearchService;
+import com.nchuy099.ecommerce.product.config.ProductSearchProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,10 +39,10 @@ class ProductServiceCacheTest {
     private StockReservationRepository stockReservationRepository;
 
     @Mock
-    private OutboxEventService outboxEventService;
+    private ProductSearchService productSearchService;
 
     @Mock
-    private ProcessedEventService processedEventService;
+    private ProductSearchProperties searchProperties;
 
     private ProductService productService;
 
@@ -52,8 +52,8 @@ class ProductServiceCacheTest {
                 productRepository,
                 productCacheService,
                 stockReservationRepository,
-                outboxEventService,
-                processedEventService
+                productSearchService,
+                searchProperties
         );
     }
 

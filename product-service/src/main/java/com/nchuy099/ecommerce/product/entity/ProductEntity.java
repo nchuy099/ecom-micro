@@ -12,6 +12,7 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
+import com.nchuy099.ecommerce.product.exception.BusinessException;
 
 @Entity
 @Table(name = "products")
@@ -70,7 +71,11 @@ public class ProductEntity {
 
     public void reserve(int quantity) {
         if (stock < quantity) {
-            throw new IllegalArgumentException("Insufficient stock");
+            throw BusinessException.conflict(
+                    "https://errors.ecom.local/insufficient-stock",
+                    "Insufficient stock",
+                    "Insufficient stock"
+            );
         }
         stock -= quantity;
     }

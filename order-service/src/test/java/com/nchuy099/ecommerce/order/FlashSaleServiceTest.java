@@ -26,10 +26,11 @@ import com.nchuy099.ecommerce.order.dto.FlashSalePurchaseResponse;
 import com.nchuy099.ecommerce.order.dto.OrderResponse;
 import com.nchuy099.ecommerce.order.entity.FlashSaleCampaignEntity;
 import com.nchuy099.ecommerce.order.entity.OrderStatus;
-import com.nchuy099.ecommerce.order.exception.FlashSalePurchaseRejectedException;
+import com.nchuy099.ecommerce.order.exception.BusinessException;
 import com.nchuy099.ecommerce.order.repository.FlashSaleCampaignRepository;
 import com.nchuy099.ecommerce.order.service.FlashSalePurchaseGate;
 import com.nchuy099.ecommerce.order.service.FlashSalePurchaseResult;
+import com.nchuy099.ecommerce.order.service.FlashSaleDistributedLock;
 import com.nchuy099.ecommerce.order.service.FlashSaleService;
 import com.nchuy099.ecommerce.order.service.OrderService;
 import org.junit.jupiter.api.Test;
@@ -51,6 +52,9 @@ class FlashSaleServiceTest {
 
     @Mock
     private OrderService orderService;
+
+    @Mock
+    private FlashSaleDistributedLock distributedLock;
 
     @Test
     void acceptedPurchaseCreatesOrderThroughExistingSagaPath() {
@@ -83,9 +87,8 @@ class FlashSaleServiceTest {
         FlashSaleService service = service(purchaseGate);
 
         assertThatThrownBy(() -> service.purchase(1L, 100L))
-                .isInstanceOf(FlashSalePurchaseRejectedException.class)
-                .extracting("reason")
-                .isEqualTo(FlashSalePurchaseRejectedException.Reason.NOT_ACTIVE);
+                .isInstanceOfSatisfying(BusinessException.class, ex ->
+                        assertThat(ex.getProperties().get("reason")).isEqualTo("NOT_ACTIVE"));
         verify(purchaseGate, never()).tryPurchase(any(), any(), org.mockito.ArgumentMatchers.anyInt());
         verify(orderService, never()).create(any());
     }
@@ -99,9 +102,8 @@ class FlashSaleServiceTest {
         FlashSaleService service = service(purchaseGate);
 
         assertThatThrownBy(() -> service.purchase(1L, 100L))
-                .isInstanceOf(FlashSalePurchaseRejectedException.class)
-                .extracting("reason")
-                .isEqualTo(FlashSalePurchaseRejectedException.Reason.SOLD_OUT);
+                .isInstanceOfSatisfying(BusinessException.class, ex ->
+                        assertThat(ex.getProperties().get("reason")).isEqualTo("SOLD_OUT"));
         verify(orderService, never()).create(any());
     }
 
@@ -114,10 +116,24 @@ class FlashSaleServiceTest {
         FlashSaleService service = service(purchaseGate);
 
         assertThatThrownBy(() -> service.purchase(1L, 100L))
-                .isInstanceOf(FlashSalePurchaseRejectedException.class)
-                .extracting("reason")
-                .isEqualTo(FlashSalePurchaseRejectedException.Reason.ALREADY_PURCHASED);
+                .isInstanceOfSatisfying(BusinessException.class, ex ->
+                        assertThat(ex.getProperties().get("reason")).isEqualTo("ALREADY_PURCHASED"));
         verify(orderService, never()).create(any());
+    }
+
+    @Test
+    void releasesDistributedLockWhenPurchaseIsRejected() {
+        FlashSaleCampaignEntity campaign = campaign(1L, 10L, 0, NOW.minusSeconds(60), NOW.plusSeconds(60), 1);
+        when(distributedLock.tryLock(1L)).thenReturn("lock-token");
+        when(campaignRepository.findById(1L)).thenReturn(Optional.of(campaign));
+        when(purchaseGate.tryPurchase(campaign, 100L, 1)).thenReturn(FlashSalePurchaseResult.SOLD_OUT);
+
+        FlashSaleService service = service(purchaseGate, distributedLock);
+
+        assertThatThrownBy(() -> service.purchase(1L, 100L))
+                .isInstanceOf(BusinessException.class);
+
+        verify(distributedLock).unlock(1L, "lock-token");
     }
 
     @Test
@@ -143,7 +159,7 @@ class FlashSaleServiceTest {
                     start.await(5, TimeUnit.SECONDS);
                     service.purchase(1L, userId);
                     accepted.incrementAndGet();
-                } catch (FlashSalePurchaseRejectedException ignored) {
+                } catch (BusinessException ignored) {
                     // Rejections are expected after stock is exhausted.
                 } catch (InterruptedException ex) {
                     Thread.currentThread().interrupt();
@@ -161,6 +177,10 @@ class FlashSaleServiceTest {
 
     private FlashSaleService service(FlashSalePurchaseGate gate) {
         return new FlashSaleService(campaignRepository, gate, orderService, Clock.fixed(NOW, ZoneOffset.UTC));
+    }
+
+    private FlashSaleService service(FlashSalePurchaseGate gate, FlashSaleDistributedLock lock) {
+        return new FlashSaleService(campaignRepository, gate, orderService, Clock.fixed(NOW, ZoneOffset.UTC), lock);
     }
 
     private static FlashSaleCampaignEntity campaign(Long id, Long productId, int stock, Instant startsAt, Instant endsAt, int maxPerUser) {

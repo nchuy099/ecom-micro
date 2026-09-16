@@ -1,34 +1,23 @@
 package com.nchuy099.ecommerce.product.service;
 
-import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.List;
 
-import com.nchuy099.ecommerce.common.event.OrderCancelledEvent;
-import com.nchuy099.ecommerce.common.event.OrderCreatedEvent;
-import com.nchuy099.ecommerce.common.event.OrderItemRequested;
-import com.nchuy099.ecommerce.common.event.StockReleasedEvent;
-import com.nchuy099.ecommerce.common.event.StockReservationFailedEvent;
-import com.nchuy099.ecommerce.common.event.StockReservedEvent;
-import com.nchuy099.ecommerce.common.event.StockReservedItem;
 import com.nchuy099.ecommerce.product.dto.CreateProductRequest;
+import com.nchuy099.ecommerce.product.dto.OrderStockReservationRequest;
 import com.nchuy099.ecommerce.product.dto.PageResponse;
 import com.nchuy099.ecommerce.product.dto.ProductResponse;
 import com.nchuy099.ecommerce.product.dto.ProductSearchRequest;
-import com.nchuy099.ecommerce.product.dto.StockQuantityRequest;
 import com.nchuy099.ecommerce.product.dto.UpdateProductRequest;
 import com.nchuy099.ecommerce.product.entity.ProductEntity;
 import com.nchuy099.ecommerce.product.entity.StockReservationEntity;
-import com.nchuy099.ecommerce.product.exception.DuplicateSkuException;
-import com.nchuy099.ecommerce.product.exception.InsufficientStockException;
-import com.nchuy099.ecommerce.product.exception.InvalidPriceRangeException;
-import com.nchuy099.ecommerce.product.exception.ProductNotFoundException;
-import com.nchuy099.ecommerce.product.exception.StockConflictException;
+import com.nchuy099.ecommerce.product.exception.BusinessException;
 import com.nchuy099.ecommerce.product.repository.ProductRepository;
 import com.nchuy099.ecommerce.product.repository.StockReservationRepository;
+import com.nchuy099.ecommerce.product.config.ProductSearchProperties;
+import com.nchuy099.ecommerce.product.search.ProductSearchService;
+import lombok.RequiredArgsConstructor;
 import com.nchuy099.ecommerce.product.specification.ProductSpecifications;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -37,26 +26,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@RequiredArgsConstructor
 public class ProductService {
     private final ProductRepository productRepository;
     private final ProductCacheService productCacheService;
     private final StockReservationRepository stockReservationRepository;
-    private final OutboxEventService outboxEventService;
-    private final ProcessedEventService processedEventService;
+    private final ProductSearchService productSearchService;
 
-    public ProductService(
-            ProductRepository productRepository,
-            ProductCacheService productCacheService,
-            StockReservationRepository stockReservationRepository,
-            OutboxEventService outboxEventService,
-            ProcessedEventService processedEventService
-    ) {
-        this.productRepository = productRepository;
-        this.productCacheService = productCacheService;
-        this.stockReservationRepository = stockReservationRepository;
-        this.outboxEventService = outboxEventService;
-        this.processedEventService = processedEventService;
-    }
+    private final ProductSearchProperties searchProperties;
 
     @Transactional
     public ProductResponse create(CreateProductRequest request) {
@@ -70,7 +47,11 @@ public class ProductService {
             );
             return ProductResponse.from(productRepository.saveAndFlush(product));
         } catch (DataIntegrityViolationException ex) {
-            throw new DuplicateSkuException();
+            throw BusinessException.conflict(
+                    "https://errors.ecom.local/duplicate-sku",
+                    "Duplicate SKU",
+                    "Product SKU already exists"
+            );
         }
     }
 
@@ -80,7 +61,7 @@ public class ProductService {
                 .orElseGet(() -> {
                     ProductResponse product = productRepository.findById(id)
                             .map(ProductResponse::from)
-                            .orElseThrow(() -> new ProductNotFoundException(id));
+                            .orElseThrow(() -> productNotFound(id));
                     productCacheService.put(id, product);
                     return product;
                 });
@@ -88,7 +69,7 @@ public class ProductService {
 
     @Transactional
     public ProductResponse update(Long id, UpdateProductRequest request) {
-        ProductEntity product = productRepository.findById(id).orElseThrow(() -> new ProductNotFoundException(id));
+        ProductEntity product = productRepository.findById(id).orElseThrow(() -> productNotFound(id));
         product.setName(request.name());
         product.setSku(request.sku());
         product.setPrice(request.price());
@@ -99,14 +80,18 @@ public class ProductService {
             productCacheService.evict(id);
             return response;
         } catch (DataIntegrityViolationException ex) {
-            throw new DuplicateSkuException();
+            throw BusinessException.conflict(
+                    "https://errors.ecom.local/duplicate-sku",
+                    "Duplicate SKU",
+                    "Product SKU already exists"
+            );
         }
     }
 
     @Transactional
     public void delete(Long id) {
         if (!productRepository.existsById(id)) {
-            throw new ProductNotFoundException(id);
+            throw productNotFound(id);
         }
         productRepository.deleteById(id);
         productCacheService.evict(id);
@@ -114,6 +99,9 @@ public class ProductService {
 
     @Transactional(readOnly = true)
     public PageResponse<ProductResponse> search(ProductSearchRequest request) {
+        if ("elasticsearch".equalsIgnoreCase(searchProperties.backend())) {
+            return productSearchService.search(request);
+        }
         validatePriceRange(request);
         Specification<ProductEntity> specification = Specification.allOf(
                 ProductSpecifications.keywordContains(request.keyword()),
@@ -135,112 +123,90 @@ public class ProductService {
         );
     }
 
+    public ProductSearchService.ReindexResult reindexSearch() {
+        return productSearchService.reindex();
+    }
+
     @Transactional
-    public ProductResponse reserve(Long id, StockQuantityRequest request) {
-        ProductEntity product = productRepository.findById(id).orElseThrow(() -> new ProductNotFoundException(id));
+    public ProductResponse reserveForOrder(Long id, OrderStockReservationRequest request) {
+        ProductEntity product = productRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> productNotFound(id));
+
+        var existingReservation = stockReservationRepository.findByOrderIdAndProductIdForUpdate(
+                request.orderId(), id
+        );
+        if (existingReservation.isPresent()) {
+            if (existingReservation.get().isReleased()) {
+                throw stockConflict(id);
+            }
+            return ProductResponse.from(product);
+        }
+
         if (product.getStock() < request.quantity()) {
-            throw new InsufficientStockException(id, request.quantity(), product.getStock());
+            throw insufficientStock(id, request.quantity(), product.getStock());
         }
+
         product.reserve(request.quantity());
-        try {
-            ProductResponse response = ProductResponse.from(productRepository.saveAndFlush(product));
-            productCacheService.evict(id);
-            return response;
-        } catch (OptimisticLockingFailureException ex) {
-            throw new StockConflictException(id);
+        ProductEntity saved = productRepository.saveAndFlush(product);
+        stockReservationRepository.saveAndFlush(new StockReservationEntity(
+                request.orderId(),
+                request.userId(),
+                saved.getId(),
+                request.quantity()
+        ));
+        productCacheService.evict(saved.getId());
+        return ProductResponse.from(saved);
+    }
+
+    @Transactional
+    public void releaseOrder(Long orderId) {
+        releaseReservations(orderId);
+    }
+
+    private void releaseReservations(Long orderId) {
+        List<StockReservationEntity> reservations = stockReservationRepository.findByOrderIdAndReleasedFalse(orderId);
+        for (StockReservationEntity reservation : reservations) {
+            ProductEntity product = productRepository.findByIdForUpdate(reservation.getProductId())
+                    .orElseThrow(() -> productNotFound(reservation.getProductId()));
+            product.release(reservation.getQuantity());
+            ProductEntity saved = productRepository.saveAndFlush(product);
+            productCacheService.evict(saved.getId());
+            reservation.markReleased();
+            stockReservationRepository.save(reservation);
         }
-    }
-
-    @Transactional
-    public ProductResponse release(Long id, StockQuantityRequest request) {
-        ProductEntity product = productRepository.findById(id).orElseThrow(() -> new ProductNotFoundException(id));
-        product.release(request.quantity());
-        try {
-            ProductResponse response = ProductResponse.from(productRepository.saveAndFlush(product));
-            productCacheService.evict(id);
-            return response;
-        } catch (OptimisticLockingFailureException ex) {
-            throw new StockConflictException(id);
-        }
-    }
-
-    @Transactional
-    public boolean reserveForOrder(OrderCreatedEvent event) {
-        return processedEventService.processOnce(event.eventId(), event.eventType(), () -> {
-            List<ProductEntity> products = new ArrayList<>();
-            List<StockReservedItem> reservedItems = new ArrayList<>();
-
-            for (OrderItemRequested item : event.items()) {
-                ProductEntity product = productRepository.findById(item.productId()).orElse(null);
-                if (product == null) {
-                    outboxEventService.writeStockReservationFailed(StockReservationFailedEvent.of(
-                            event.orderId(),
-                            event.userId(),
-                            "Product not found: " + item.productId()
-                    ));
-                    return true;
-                }
-                if (product.getStock() < item.quantity()) {
-                    outboxEventService.writeStockReservationFailed(StockReservationFailedEvent.of(
-                            event.orderId(),
-                            event.userId(),
-                            "Insufficient stock for product " + item.productId()
-                    ));
-                    return true;
-                }
-                products.add(product);
-            }
-
-            for (int i = 0; i < event.items().size(); i++) {
-                OrderItemRequested item = event.items().get(i);
-                ProductEntity product = products.get(i);
-                product.reserve(item.quantity());
-                ProductEntity saved = productRepository.saveAndFlush(product);
-                productCacheService.evict(saved.getId());
-                stockReservationRepository.save(new StockReservationEntity(
-                        event.orderId(),
-                        event.userId(),
-                        saved.getId(),
-                        item.quantity()
-                ));
-                BigDecimal subtotal = saved.getPrice().multiply(BigDecimal.valueOf(item.quantity()));
-                reservedItems.add(new StockReservedItem(
-                        saved.getId(),
-                        saved.getName(),
-                        item.quantity(),
-                        saved.getPrice(),
-                        subtotal
-                ));
-            }
-
-            outboxEventService.writeStockReserved(StockReservedEvent.of(event.orderId(), event.userId(), reservedItems));
-            return true;
-        });
-    }
-
-    @Transactional
-    public boolean releaseForOrder(OrderCancelledEvent event) {
-        return processedEventService.processOnce(event.eventId(), event.eventType(), () -> {
-            List<StockReservationEntity> reservations = stockReservationRepository.findByOrderIdAndReleasedFalse(event.orderId());
-            for (StockReservationEntity reservation : reservations) {
-                ProductEntity product = productRepository.findById(reservation.getProductId())
-                        .orElseThrow(() -> new ProductNotFoundException(reservation.getProductId()));
-                product.release(reservation.getQuantity());
-                ProductEntity saved = productRepository.saveAndFlush(product);
-                productCacheService.evict(saved.getId());
-                reservation.markReleased();
-                stockReservationRepository.save(reservation);
-            }
-            if (!reservations.isEmpty()) {
-                outboxEventService.writeStockReleased(StockReleasedEvent.of(event.orderId(), event.userId()));
-            }
-            return true;
-        });
     }
 
     private static void validatePriceRange(ProductSearchRequest request) {
         if (request.minPrice() != null && request.maxPrice() != null && request.minPrice().compareTo(request.maxPrice()) > 0) {
-            throw new InvalidPriceRangeException();
+            throw BusinessException.badRequest(
+                    "https://errors.ecom.local/invalid-price-range",
+                    "Invalid price range",
+                    "minPrice must be less than or equal to maxPrice"
+            );
         }
+    }
+
+    private static BusinessException productNotFound(Long id) {
+        return BusinessException.notFound(
+                "https://errors.ecom.local/product-not-found",
+                "Product not found",
+                "Product not found: " + id
+        );
+    }
+
+    private static BusinessException insufficientStock(Long id, int requested, int available) {
+        return BusinessException.conflict(
+                "https://errors.ecom.local/insufficient-stock",
+                "Insufficient stock",
+                "Insufficient stock for product " + id + ": requested " + requested + ", available " + available
+        );
+    }
+
+    private static BusinessException stockConflict(Long id) {
+        return BusinessException.conflict(
+                "https://errors.ecom.local/stock-conflict",
+                "Stock conflict",
+                "Concurrent stock modification for product: " + id
+        );
     }
 }

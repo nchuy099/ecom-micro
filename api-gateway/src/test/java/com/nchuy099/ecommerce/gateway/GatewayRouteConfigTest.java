@@ -50,9 +50,9 @@ class GatewayRouteConfigTest {
     }
 
     @Test
-    void userServiceRouteIsConfiguredCorrectly() {
-        RouteDefinition route = findRoute("user-service");
-        assertThat(route.getUri().toString()).isEqualTo("lb://user-service");
+    void authServiceUserRouteIsConfiguredCorrectly() {
+        RouteDefinition route = findRoute("auth-service");
+        assertThat(route.getUri().toString()).isEqualTo("lb://auth-service");
         assertThat(pathPattern(route)).isEqualTo("/api/users/**");
         assertThat(rewriteRegexp(route)).isEqualTo("/api/users(?<segment>/?.*)");
         assertThat(rewriteReplacement(route)).isEqualTo("/v1/users$\\{segment}");
@@ -92,13 +92,6 @@ class GatewayRouteConfigTest {
         assertThat(pathPattern(route)).isEqualTo("/api/auth/login");
         assertThat(rewriteRegexp(route)).isEqualTo("/api/auth/login");
         assertThat(rewriteReplacement(route)).isEqualTo("/realms/ecom/protocol/openid-connect/token");
-    }
-
-    @Test
-    void authServiceRouteIsAbsent() {
-        // EC-P1-002 proxies Keycloak login directly; auth-service remains out of the request path.
-        assertThat(gatewayProperties.getRoutes())
-                .noneMatch(r -> "auth-service".equals(r.getId()));
     }
 
     @TestConfiguration

@@ -9,11 +9,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.time.Instant;
 import java.util.List;
 
-import com.nchuy099.ecommerce.common.event.NotificationChannel;
+import com.nchuy099.ecommerce.notification.event.NotificationChannel;
 import com.nchuy099.ecommerce.notification.controller.NotificationAdminController;
 import com.nchuy099.ecommerce.notification.dto.NotificationDlqResponse;
 import com.nchuy099.ecommerce.notification.dto.NotificationReplayResponse;
-import com.nchuy099.ecommerce.notification.exception.NotificationDlqNotFoundException;
+import com.nchuy099.ecommerce.notification.exception.BusinessException;
 import com.nchuy099.ecommerce.notification.service.NotificationDlqService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -61,7 +61,10 @@ class NotificationAdminControllerTest {
 
     @Test
     void missingDlqReturnsProblemDetail() throws Exception {
-        when(dlqService.replay(404L)).thenThrow(new NotificationDlqNotFoundException(404L));
+        when(dlqService.replay(404L)).thenThrow(BusinessException.notFound(
+                "https://errors.ecom.local/notification-dlq-not-found",
+                "Notification DLQ entry not found",
+                "Notification DLQ entry not found: 404"));
 
         mockMvc.perform(post("/v1/admin/dlq/404/replay"))
                 .andExpect(status().isNotFound())

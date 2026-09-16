@@ -1,6 +1,3 @@
-server:
-  port: 8083
-
 spring:
   application:
     name: order-service
@@ -14,21 +11,25 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-    consumer:
-      auto-offset-reset: earliest
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       properties:
-        spring.json.trusted.packages: "com.nchuy099.ecommerce.*"
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
+        spring.json.add.type.headers: false
+
+server:
+  port: 8083
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_DEFAULT_ZONE:http://localhost:8761/eureka/}
 
 services:
   product:
@@ -41,10 +42,14 @@ idempotency:
     completed-ttl: ${ORDER_IDEMPOTENCY_COMPLETED_TTL:24h}
     processing-ttl: ${ORDER_IDEMPOTENCY_PROCESSING_TTL:60s}
 
-eureka:
-  client:
-    service-url:
-      defaultZone: ${EUREKA_DEFAULT_ZONE:http://localhost:8761/eureka/}
+notification:
+  publisher:
+    enabled: ${ORDER_NOTIFICATION_PUBLISHER_ENABLED:true}
+
+flash-sale:
+  lock:
+    wait-timeout: ${FLASHSALE_LOCK_WAIT_TIMEOUT:2s}
+    lease-time: ${FLASHSALE_LOCK_LEASE_TIME:10s}
 
 resilience4j:
   bulkhead:

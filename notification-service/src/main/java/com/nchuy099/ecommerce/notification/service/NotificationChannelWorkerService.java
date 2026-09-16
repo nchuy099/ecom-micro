@@ -2,8 +2,8 @@ package com.nchuy099.ecommerce.notification.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.nchuy099.ecommerce.common.event.NotificationChannelRequestedEvent;
-import com.nchuy099.ecommerce.common.event.NotificationDlqEvent;
+import com.nchuy099.ecommerce.notification.event.NotificationChannelRequestedEvent;
+import com.nchuy099.ecommerce.notification.event.NotificationDlqEvent;
 import com.nchuy099.ecommerce.notification.config.NotificationProperties;
 import com.nchuy099.ecommerce.notification.entity.NotificationDeliveryEntity;
 import com.nchuy099.ecommerce.notification.entity.NotificationDlqEntity;
@@ -13,8 +13,10 @@ import com.nchuy099.ecommerce.notification.repository.NotificationDeliveryReposi
 import com.nchuy099.ecommerce.notification.repository.NotificationDlqRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import lombok.RequiredArgsConstructor;
 
 @Service
+@RequiredArgsConstructor
 public class NotificationChannelWorkerService {
     private final NotificationDeliveryRepository deliveryRepository;
     private final NotificationDlqRepository dlqRepository;
@@ -22,22 +24,6 @@ public class NotificationChannelWorkerService {
     private final NotificationEventPublisher publisher;
     private final NotificationProperties properties;
     private final ObjectMapper objectMapper;
-
-    public NotificationChannelWorkerService(
-            NotificationDeliveryRepository deliveryRepository,
-            NotificationDlqRepository dlqRepository,
-            NotificationProvider provider,
-            NotificationEventPublisher publisher,
-            NotificationProperties properties,
-            ObjectMapper objectMapper
-    ) {
-        this.deliveryRepository = deliveryRepository;
-        this.dlqRepository = dlqRepository;
-        this.provider = provider;
-        this.publisher = publisher;
-        this.properties = properties;
-        this.objectMapper = objectMapper;
-    }
 
     @Transactional
     public void process(NotificationChannelRequestedEvent event) {

@@ -2,7 +2,7 @@ package com.nchuy099.ecommerce.notification.controller;
 
 import java.util.List;
 
-import com.nchuy099.ecommerce.common.ApiResponse;
+import com.nchuy099.ecommerce.notification.api.ApiResponse;
 import com.nchuy099.ecommerce.notification.dto.NotificationDlqResponse;
 import com.nchuy099.ecommerce.notification.dto.NotificationReplayResponse;
 import com.nchuy099.ecommerce.notification.service.NotificationDlqService;
@@ -13,15 +13,13 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequestMapping("/v1/admin/dlq")
+@RequiredArgsConstructor
 public class NotificationAdminController {
     private final NotificationDlqService dlqService;
-
-    public NotificationAdminController(NotificationDlqService dlqService) {
-        this.dlqService = dlqService;
-    }
 
     @GetMapping
     public ApiResponse<List<NotificationDlqResponse>> findAll() {

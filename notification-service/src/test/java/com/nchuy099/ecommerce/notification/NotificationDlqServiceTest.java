@@ -10,12 +10,12 @@ import static org.mockito.Mockito.when;
 import java.util.List;
 import java.util.Optional;
 
-import com.nchuy099.ecommerce.common.event.NotificationChannel;
+import com.nchuy099.ecommerce.notification.event.NotificationChannel;
 import com.nchuy099.ecommerce.notification.dto.NotificationReplayResponse;
 import com.nchuy099.ecommerce.notification.entity.NotificationDeliveryEntity;
 import com.nchuy099.ecommerce.notification.entity.NotificationDlqEntity;
 import com.nchuy099.ecommerce.notification.entity.NotificationDlqStatus;
-import com.nchuy099.ecommerce.notification.exception.NotificationDlqNotFoundException;
+import com.nchuy099.ecommerce.notification.exception.BusinessException;
 import com.nchuy099.ecommerce.notification.publisher.NotificationEventPublisher;
 import com.nchuy099.ecommerce.notification.repository.NotificationDeliveryRepository;
 import com.nchuy099.ecommerce.notification.repository.NotificationDlqRepository;
@@ -81,7 +81,7 @@ class NotificationDlqServiceTest {
         when(dlqRepository.findById(404L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service().replay(404L))
-                .isInstanceOf(NotificationDlqNotFoundException.class);
+                .isInstanceOf(BusinessException.class);
     }
 
     private NotificationDlqService service() {

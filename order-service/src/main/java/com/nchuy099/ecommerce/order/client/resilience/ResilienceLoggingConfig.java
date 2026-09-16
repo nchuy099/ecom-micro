@@ -3,19 +3,16 @@ package com.nchuy099.ecommerce.order.client.resilience;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import jakarta.annotation.PostConstruct;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Configuration;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Configuration
+@RequiredArgsConstructor
+@Slf4j
 public class ResilienceLoggingConfig {
-    private static final Logger log = LoggerFactory.getLogger(ResilienceLoggingConfig.class);
 
     private final CircuitBreakerRegistry circuitBreakerRegistry;
-
-    public ResilienceLoggingConfig(CircuitBreakerRegistry circuitBreakerRegistry) {
-        this.circuitBreakerRegistry = circuitBreakerRegistry;
-    }
 
     @PostConstruct
     public void registerEventListeners() {

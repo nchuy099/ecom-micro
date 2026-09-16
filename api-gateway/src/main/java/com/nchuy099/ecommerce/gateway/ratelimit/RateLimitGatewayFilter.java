@@ -3,8 +3,6 @@ package com.nchuy099.ecommerce.gateway.ratelimit;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -17,22 +15,20 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.WebFilter;
 import org.springframework.web.server.WebFilterChain;
 import org.springframework.web.server.ServerWebExchange;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import reactor.core.publisher.Mono;
 
 @Component
+@RequiredArgsConstructor
+@Slf4j
 public class RateLimitGatewayFilter implements WebFilter, Ordered {
     public static final String RATE_LIMIT_REMAINING_HEADER = "X-RateLimit-Remaining";
 
-    private static final Logger log = LoggerFactory.getLogger(RateLimitGatewayFilter.class);
 
     private final RateLimitProperties properties;
     private final TokenBucketRateLimiter rateLimiter;
-
-    public RateLimitGatewayFilter(RateLimitProperties properties, TokenBucketRateLimiter rateLimiter) {
-        this.properties = properties;
-        this.rateLimiter = rateLimiter;
-    }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {

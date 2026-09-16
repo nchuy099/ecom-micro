@@ -13,8 +13,20 @@ public record ProductSearchRequest(
         @DecimalMin("0.00") BigDecimal minPrice,
         @DecimalMin("0.00") BigDecimal maxPrice,
         @Min(0) Integer page,
-        @Min(1) @Max(100) Integer size
+        @Min(1) @Max(100) Integer size,
+        String cursor
 ) {
+    public ProductSearchRequest(
+            String keyword,
+            Long categoryId,
+            BigDecimal minPrice,
+            BigDecimal maxPrice,
+            Integer page,
+            Integer size
+    ) {
+        this(keyword, categoryId, minPrice, maxPrice, page, size, null);
+    }
+
     public int pageOrDefault() {
         return page == null ? 0 : page;
     }

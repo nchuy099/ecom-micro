@@ -12,7 +12,7 @@ services:
       MYSQL_PASSWORD: ecom
       MYSQL_DATABASE: ecom_bootstrap
     ports:
-      - "3306:3306"
+      - "13306:3306"
     volumes:
       - mysql-data:/var/lib/mysql
       - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
@@ -25,12 +25,31 @@ services:
   redis:
     image: redis:7.4-alpine
     ports:
-      - "6379:6379"
+      - "16379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 10
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.5.1
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      cluster.routing.allocation.disk.watermark.low: 1gb
+      cluster.routing.allocation.disk.watermark.high: 500mb
+      cluster.routing.allocation.disk.watermark.flood_stage: 200mb
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health | grep -q 'status'"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
 
   kafka:
     image: apache/kafka:3.9.1
@@ -55,37 +74,180 @@ services:
       timeout: 10s
       retries: 10
 
-  debezium:
-    image: quay.io/debezium/connect:3.0
-    profiles: ["cdc"]
-    ports:
-      - "8085:8083"
-    environment:
-      BOOTSTRAP_SERVERS: kafka:29092
-      GROUP_ID: ecom-debezium
-      CONFIG_STORAGE_TOPIC: ecom_connect_configs
-      OFFSET_STORAGE_TOPIC: ecom_connect_offsets
-      STATUS_STORAGE_TOPIC: ecom_connect_statuses
-      KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
-      VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
-      CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
-      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
-    depends_on:
-      mysql:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
     command: ["start-dev", "--import-realm"]
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HOSTNAME: keycloak
     ports:
       - "8090:8080"
     volumes:
       - ./docker/keycloak:/opt/keycloak/data/import:ro
 
+  service-registry:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: service-registry
+    ports:
+      - "8761:8761"
+    restart: on-failure
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8761/actuator/health | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: api-gateway
+    environment:
+      EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
+      REDIS_HOST: redis
+      KEYCLOAK_ISSUER_URI: http://keycloak:8080/realms/ecom
+      KEYCLOAK_BASE_URL: http://keycloak:8080
+    ports:
+      - "8282:8282"
+    restart: on-failure
+    depends_on:
+      service-registry:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8282/actuator/health | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: auth-service
+    environment:
+      EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
+      AUTH_DB_URL: jdbc:mysql://mysql:3306/auth_service
+    ports:
+      - "8080:8080"
+    restart: on-failure
+    depends_on:
+      service-registry:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  product-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: product-service
+    environment:
+      EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
+      PRODUCT_DB_URL: jdbc:mysql://mysql:3306/product_service
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      REDIS_HOST: redis
+      ELASTICSEARCH_URIS: http://elasticsearch:9200
+    ports:
+      - "8082:8082"
+    restart: on-failure
+    depends_on:
+      service-registry:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8082/actuator/health | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  order-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: order-service
+    environment:
+      EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
+      ORDER_DB_URL: jdbc:mysql://mysql:3306/order_service
+      PRODUCT_SERVICE_URL: http://product-service:8082
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      REDIS_HOST: redis
+      ORDER_NOTIFICATION_PUBLISHER_ENABLED: "true"
+    ports:
+      - "8083:8083"
+    restart: on-failure
+    depends_on:
+      service-registry:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      product-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8083/actuator/health | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: notification-service
+    environment:
+      EUREKA_DEFAULT_ZONE: http://service-registry:8761/eureka/
+      NOTIFICATION_DB_URL: jdbc:mysql://mysql:3306/notification_service
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    ports:
+      - "8084:8084"
+    restart: on-failure
+    depends_on:
+      service-registry:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8084/actuator/health | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
 volumes:
   mysql-data:
+  elasticsearch-data:

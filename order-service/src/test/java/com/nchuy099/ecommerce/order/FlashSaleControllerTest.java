@@ -7,7 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.nchuy099.ecommerce.order.controller.FlashSaleController;
 import com.nchuy099.ecommerce.order.dto.FlashSalePurchaseResponse;
-import com.nchuy099.ecommerce.order.exception.FlashSalePurchaseRejectedException;
+import com.nchuy099.ecommerce.order.exception.BusinessException;
 import com.nchuy099.ecommerce.order.service.FlashSaleService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,10 +40,11 @@ class FlashSaleControllerTest {
     @Test
     void soldOutReturnsConflictProblemDetail() throws Exception {
         when(flashSaleService.purchase(1L, 100L))
-                .thenThrow(new FlashSalePurchaseRejectedException(
-                        FlashSalePurchaseRejectedException.Reason.SOLD_OUT,
-                        "Flash sale campaign is sold out"
-                ));
+                .thenThrow(BusinessException.conflict(
+                                "https://errors.ecom.local/flash-sale-sold-out",
+                                "SOLD_OUT",
+                                "Flash sale campaign is sold out")
+                        .withProperty("reason", "SOLD_OUT"));
 
         mockMvc.perform(post("/v1/flashsale/1/purchase")
                         .header("X-User-Id", "100"))
@@ -55,10 +56,11 @@ class FlashSaleControllerTest {
     @Test
     void alreadyPurchasedReturnsConflictProblemDetail() throws Exception {
         when(flashSaleService.purchase(1L, 100L))
-                .thenThrow(new FlashSalePurchaseRejectedException(
-                        FlashSalePurchaseRejectedException.Reason.ALREADY_PURCHASED,
-                        "Flash sale purchase limit already reached"
-                ));
+                .thenThrow(BusinessException.conflict(
+                                "https://errors.ecom.local/flash-sale-already-purchased",
+                                "ALREADY_PURCHASED",
+                                "Flash sale purchase limit already reached")
+                        .withProperty("reason", "ALREADY_PURCHASED"));
 
         mockMvc.perform(post("/v1/flashsale/1/purchase")
                         .header("X-User-Id", "100"))

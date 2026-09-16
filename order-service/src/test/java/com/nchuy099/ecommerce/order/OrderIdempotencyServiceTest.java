@@ -13,11 +13,11 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.nchuy099.ecommerce.common.ApiResponse;
+import com.nchuy099.ecommerce.order.api.ApiResponse;
 import com.nchuy099.ecommerce.order.dto.OrderItemResponse;
 import com.nchuy099.ecommerce.order.dto.OrderResponse;
 import com.nchuy099.ecommerce.order.entity.OrderStatus;
-import com.nchuy099.ecommerce.order.exception.IdempotencyInProgressException;
+import com.nchuy099.ecommerce.order.exception.BusinessException;
 import com.nchuy099.ecommerce.order.idempotency.OrderIdempotencyService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -92,7 +92,8 @@ class OrderIdempotencyServiceTest {
         when(valueOperations.get("idem:order:create:100:abc")).thenReturn(processing);
 
         assertThatThrownBy(() -> service.executeCreateOrder("100", "abc", () -> orderResponse(1L, 100L)))
-                .isInstanceOf(IdempotencyInProgressException.class);
+                .isInstanceOfSatisfying(BusinessException.class, ex ->
+                        assertThat(ex.getProperties().get("retryAfterSeconds")).isEqualTo(60L));
     }
 
     @Test

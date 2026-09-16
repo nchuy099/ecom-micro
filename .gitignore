@@ -2,6 +2,7 @@
 .harness/
 build/
 */build/
+*/bin/
 out/
 target/
 

@@ -35,9 +35,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
         "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.datasource.username=sa",
         "spring.datasource.password=",
-        "eureka.client.enabled=false",
-        "spring.kafka.listener.auto-startup=false",
-        "ecommerce.kafka.topics.enabled=false"
+        "eureka.client.enabled=false"
 })
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 class ProductClientResilienceIntegrationTest {
@@ -59,7 +57,7 @@ class ProductClientResilienceIntegrationTest {
     @BeforeAll
     static void startServer() throws IOException {
         server = HttpServer.create(new InetSocketAddress(0), 0);
-        server.createContext("/v1/products/1/reserve", ProductClientResilienceIntegrationTest::handleReserve);
+        server.createContext("/v1/products/1/reserve-for-order", ProductClientResilienceIntegrationTest::handleReserve);
         server.start();
     }
 
@@ -121,7 +119,7 @@ class ProductClientResilienceIntegrationTest {
     void retriesOnTransient503AndSucceedsOnThirdAttempt() {
         responseMode.set(MODE_RETRY_THEN_SUCCESS);
 
-        ProductClientResponse response = productClient.reserveStock(1L, 2);
+        ProductClientResponse response = productClient.reserveStockForOrder(99L, 100L, 1L, 2);
 
         assertThat(response).isNotNull();
         assertThat(response.id()).isEqualTo(1L);
@@ -135,7 +133,7 @@ class ProductClientResilienceIntegrationTest {
     void doesNotRetryOn409ConflictAndDoesNotRecordAsCircuitFailure() {
         responseMode.set(MODE_CONFLICT_409);
 
-        assertThatThrownBy(() -> productClient.reserveStock(1L, 2))
+        assertThatThrownBy(() -> productClient.reserveStockForOrder(99L, 100L, 1L, 2))
                 .isInstanceOf(ProductReservationException.class)
                 .satisfies(ex -> assertThat(((ProductReservationException) ex).getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
 
@@ -154,7 +152,7 @@ class ProductClientResilienceIntegrationTest {
 
         // Execute calls until minimum-number-of-calls (3) is reached and circuit trips
         for (int i = 0; i < 3; i++) {
-            assertThatThrownBy(() -> productClient.reserveStock(1L, 2))
+            assertThatThrownBy(() -> productClient.reserveStockForOrder(99L, 100L, 1L, 2))
                     .isInstanceOf(ProductReservationException.class);
         }
 
@@ -163,7 +161,7 @@ class ProductClientResilienceIntegrationTest {
 
         // When circuit is OPEN, next call must fail fast with CallNotPermittedException
         // and must NOT make any additional network calls
-        assertThatThrownBy(() -> productClient.reserveStock(1L, 2))
+        assertThatThrownBy(() -> productClient.reserveStockForOrder(99L, 100L, 1L, 2))
                 .isInstanceOf(CallNotPermittedException.class);
 
         assertThat(callCount.get()).isEqualTo(callsRecordedSoFar);

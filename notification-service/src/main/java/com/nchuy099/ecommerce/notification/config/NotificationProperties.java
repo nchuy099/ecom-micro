@@ -4,7 +4,7 @@ import java.time.Duration;
 import java.util.HashSet;
 import java.util.Set;
 
-import com.nchuy099.ecommerce.common.event.NotificationChannel;
+import com.nchuy099.ecommerce.notification.event.NotificationChannel;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 

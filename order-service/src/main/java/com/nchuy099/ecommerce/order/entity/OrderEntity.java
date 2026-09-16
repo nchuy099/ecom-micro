@@ -17,6 +17,7 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import com.nchuy099.ecommerce.order.exception.BusinessException;
 
 @Entity
 @Table(name = "orders")
@@ -116,7 +117,11 @@ public class OrderEntity {
         return items.stream()
                 .filter(item -> item.getProductId().equals(productId))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Order item not found for product " + productId));
+                .orElseThrow(() -> BusinessException.badRequest(
+                        "https://errors.ecom.local/invalid-pagination",
+                        "Invalid pagination request",
+                        "Order item not found for product " + productId
+                ));
     }
 
     public List<OrderItemEntity> getItems() {

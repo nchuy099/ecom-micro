@@ -2,7 +2,7 @@ package com.nchuy099.ecommerce.notification.entity;
 
 import java.time.Instant;
 
-import com.nchuy099.ecommerce.common.event.NotificationChannel;
+import com.nchuy099.ecommerce.notification.event.NotificationChannel;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

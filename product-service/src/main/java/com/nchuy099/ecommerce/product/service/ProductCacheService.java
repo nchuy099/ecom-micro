@@ -6,30 +6,21 @@ import java.util.Optional;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.nchuy099.ecommerce.product.dto.ProductResponse;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
+@RequiredArgsConstructor
+@Slf4j
 public class ProductCacheService {
-    private static final Logger log = LoggerFactory.getLogger(ProductCacheService.class);
     private static final String KEY_PREFIX = "product:";
     private static final Duration L2_TTL = Duration.ofSeconds(60);
 
     private final Cache<Long, ProductResponse> l1Cache;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
-
-    public ProductCacheService(
-            Cache<Long, ProductResponse> productL1Cache,
-            StringRedisTemplate redisTemplate,
-            ObjectMapper objectMapper
-    ) {
-        this.l1Cache = productL1Cache;
-        this.redisTemplate = redisTemplate;
-        this.objectMapper = objectMapper;
-    }
 
     public Optional<ProductResponse> get(Long id) {
         if (id == null) {

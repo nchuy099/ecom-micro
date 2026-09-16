@@ -1,7 +1,6 @@
 package com.nchuy099.ecommerce.order.exception;
 
 import java.net.URI;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.HttpHeaders;
@@ -14,42 +13,19 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    @ExceptionHandler(BusinessException.class)
+    ResponseEntity<ProblemDetail> handleBusiness(BusinessException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(ex.getStatus(), ex.getMessage());
+        problem.setType(ex.getType());
+        problem.setTitle(ex.getTitle());
+        ex.getProperties().forEach(problem::setProperty);
 
-    @ExceptionHandler(OrderNotFoundException.class)
-    ProblemDetail handleNotFound(OrderNotFoundException ex) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
-        problem.setType(URI.create("https://errors.ecom.local/order-not-found"));
-        problem.setTitle("Order not found");
-        return problem;
-    }
-
-    @ExceptionHandler(FlashSaleCampaignNotFoundException.class)
-    ProblemDetail handleFlashSaleCampaignNotFound(FlashSaleCampaignNotFoundException ex) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
-        problem.setType(URI.create("https://errors.ecom.local/flash-sale-campaign-not-found"));
-        problem.setTitle("Flash sale campaign not found");
-        return problem;
-    }
-
-    @ExceptionHandler(OrderStateConflictException.class)
-    ProblemDetail handleStateConflict(OrderStateConflictException ex) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
-        problem.setType(URI.create("https://errors.ecom.local/order-conflict"));
-        problem.setTitle("Order state conflict");
-        return problem;
-    }
-
-    @ExceptionHandler(FlashSalePurchaseRejectedException.class)
-    ProblemDetail handleFlashSalePurchaseRejected(FlashSalePurchaseRejectedException ex) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
-        problem.setType(URI.create("https://errors.ecom.local/flash-sale-" + ex.getReason().name().toLowerCase().replace('_', '-')));
-        problem.setTitle(switch (ex.getReason()) {
-            case NOT_ACTIVE -> "Flash sale not active";
-            case SOLD_OUT -> "SOLD_OUT";
-            case ALREADY_PURCHASED -> "ALREADY_PURCHASED";
-        });
-        problem.setProperty("reason", ex.getReason().name());
-        return problem;
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(ex.getStatus());
+        Object retryAfterSeconds = ex.getProperties().get("retryAfterSeconds");
+        if (retryAfterSeconds instanceof Number retryAfter) {
+            response.header(HttpHeaders.RETRY_AFTER, String.valueOf(retryAfter.longValue()));
+        }
+        return response.body(problem);
     }
 
     @ExceptionHandler(ProductReservationException.class)
@@ -59,16 +35,6 @@ public class GlobalExceptionHandler {
         problem.setType(URI.create("https://errors.ecom.local/product-reservation-failed"));
         problem.setTitle("Product reservation failed");
         return problem;
-    }
-
-    @ExceptionHandler(IdempotencyInProgressException.class)
-    ResponseEntity<ProblemDetail> handleIdempotencyInProgress(IdempotencyInProgressException ex) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
-        problem.setType(URI.create("https://errors.ecom.local/idempotency-in-progress"));
-        problem.setTitle("Idempotency key is processing");
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()))
-                .body(problem);
     }
 
     @ExceptionHandler(io.github.resilience4j.circuitbreaker.CallNotPermittedException.class)
@@ -111,4 +77,5 @@ public class GlobalExceptionHandler {
         problem.setTitle("Malformed request");
         return problem;
     }
+
 }

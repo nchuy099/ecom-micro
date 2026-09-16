@@ -1,6 +1,6 @@
 package com.nchuy099.ecommerce.order.controller;
 
-import com.nchuy099.ecommerce.common.ApiResponse;
+import com.nchuy099.ecommerce.order.api.ApiResponse;
 import com.nchuy099.ecommerce.order.dto.FlashSalePurchaseResponse;
 import com.nchuy099.ecommerce.order.service.FlashSaleService;
 import org.springframework.http.HttpStatus;
@@ -10,17 +10,15 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequestMapping("/v1/flashsale")
+@RequiredArgsConstructor
 public class FlashSaleController {
     private static final String USER_ID_HEADER = "X-User-Id";
 
     private final FlashSaleService flashSaleService;
-
-    public FlashSaleController(FlashSaleService flashSaleService) {
-        this.flashSaleService = flashSaleService;
-    }
 
     @PostMapping("/{campaignId}/purchase")
     public ResponseEntity<ApiResponse<FlashSalePurchaseResponse>> purchase(
