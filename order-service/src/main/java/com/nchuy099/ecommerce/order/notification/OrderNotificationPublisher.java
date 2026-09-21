@@ -1,7 +1,7 @@
 package com.nchuy099.ecommerce.order.notification;
 
 import com.nchuy099.ecommerce.order.event.KafkaTopics;
-import com.nchuy099.ecommerce.order.event.NotificationRequestedEvent;
+import com.nchuy099.ecommerce.order.event.OrderConfirmedEvent;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
@@ -23,13 +23,13 @@ public class OrderNotificationPublisher {
         if (!enabled) {
             return;
         }
-        NotificationRequestedEvent event = NotificationRequestedEvent.orderConfirmed(
+        OrderConfirmedEvent event = OrderConfirmedEvent.of(
                 orderId,
                 userId,
                 orderNumber,
                 message
         );
-        kafkaTemplate.send(KafkaTopics.NOTIFICATION_REQUESTED, String.valueOf(orderId), event);
+        kafkaTemplate.send(KafkaTopics.ORDER_EVENTS, String.valueOf(orderId), event);
     }
 
     public static OrderNotificationPublisher noop() {

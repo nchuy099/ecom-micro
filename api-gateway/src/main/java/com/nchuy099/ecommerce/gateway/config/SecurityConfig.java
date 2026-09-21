@@ -29,6 +29,7 @@ public class SecurityConfig {
                         .pathMatchers(HttpMethod.POST, "/api/products/**").hasAnyRole("SELLER", "ADMIN")
                         .pathMatchers(HttpMethod.PUT, "/api/products/**").hasAnyRole("SELLER", "ADMIN")
                         .pathMatchers(HttpMethod.DELETE, "/api/products/**").hasAnyRole("SELLER", "ADMIN")
+                        .pathMatchers(HttpMethod.POST, "/api/flashsale/campaigns").hasAnyRole("SELLER", "ADMIN")
                         .pathMatchers(HttpMethod.POST, "/api/flashsale/**").hasAnyRole("CUSTOMER", "VIP", "ADMIN")
                         .pathMatchers(HttpMethod.POST, "/api/orders").hasAnyRole("CUSTOMER", "VIP", "ADMIN")
                         .pathMatchers("/api/orders/**").authenticated()

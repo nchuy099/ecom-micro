@@ -6,7 +6,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.nchuy099.ecommerce.order.event.KafkaTopics;
-import com.nchuy099.ecommerce.order.event.NotificationRequestedEvent;
+import com.nchuy099.ecommerce.order.event.OrderConfirmedEvent;
 import com.nchuy099.ecommerce.order.notification.OrderNotificationPublisher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,11 +27,12 @@ class OrderNotificationPublisherTest {
         publisher.publishOrderConfirmed(42L, 100L, "ORD-42", "Order confirmed");
 
         ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
-        verify(kafkaTemplate).send(eq(KafkaTopics.NOTIFICATION_REQUESTED), eq("42"), eventCaptor.capture());
-        NotificationRequestedEvent event = (NotificationRequestedEvent) eventCaptor.getValue();
-        org.assertj.core.api.Assertions.assertThat(event.campaignId()).isEqualTo("order:42");
+        verify(kafkaTemplate).send(eq(KafkaTopics.ORDER_EVENTS), eq("42"), eventCaptor.capture());
+        OrderConfirmedEvent event = (OrderConfirmedEvent) eventCaptor.getValue();
+        org.assertj.core.api.Assertions.assertThat(event.orderId()).isEqualTo(42L);
         org.assertj.core.api.Assertions.assertThat(event.userId()).isEqualTo(100L);
-        org.assertj.core.api.Assertions.assertThat(event.subject()).isEqualTo("Order confirmed: ORD-42");
+        org.assertj.core.api.Assertions.assertThat(event.orderNumber()).isEqualTo("ORD-42");
+        org.assertj.core.api.Assertions.assertThat(event.message()).isEqualTo("Order confirmed");
     }
 
     @Test

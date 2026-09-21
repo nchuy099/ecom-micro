@@ -37,6 +37,12 @@ public class FlashSaleCampaignEntity {
     @Column(name = "max_per_user", nullable = false)
     private Integer maxPerUser;
 
+    @Column(name = "notification_subject", length = 255)
+    private String notificationSubject;
+
+    @Column(name = "notification_message", length = 1000)
+    private String notificationMessage;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -48,12 +54,20 @@ public class FlashSaleCampaignEntity {
 
     public FlashSaleCampaignEntity(Long productId, Integer stock, Instant startsAt, Instant endsAt,
                                    BigDecimal promoPrice, Integer maxPerUser) {
+        this(productId, stock, startsAt, endsAt, promoPrice, maxPerUser, null, null);
+    }
+
+    public FlashSaleCampaignEntity(Long productId, Integer stock, Instant startsAt, Instant endsAt,
+                                   BigDecimal promoPrice, Integer maxPerUser,
+                                   String notificationSubject, String notificationMessage) {
         this.productId = productId;
         this.stock = stock;
         this.startsAt = startsAt;
         this.endsAt = endsAt;
         this.promoPrice = promoPrice;
         this.maxPerUser = maxPerUser;
+        this.notificationSubject = notificationSubject;
+        this.notificationMessage = notificationMessage;
     }
 
     @PrePersist
@@ -100,6 +114,14 @@ public class FlashSaleCampaignEntity {
 
     public Integer getMaxPerUser() {
         return maxPerUser;
+    }
+
+    public String getNotificationSubject() {
+        return notificationSubject;
+    }
+
+    public String getNotificationMessage() {
+        return notificationMessage;
     }
 
     public Instant getCreatedAt() {

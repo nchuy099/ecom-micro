@@ -50,6 +50,10 @@ flash-sale:
   lock:
     wait-timeout: ${FLASHSALE_LOCK_WAIT_TIMEOUT:2s}
     lease-time: ${FLASHSALE_LOCK_LEASE_TIME:10s}
+  notification:
+    lead-time: ${FLASHSALE_NOTIFICATION_LEAD_TIME:15m}
+    batch-size: ${FLASHSALE_NOTIFICATION_BATCH_SIZE:1000}
+    poll-interval-ms: ${FLASHSALE_NOTIFICATION_POLL_INTERVAL_MS:30000}
 
 resilience4j:
   bulkhead:
