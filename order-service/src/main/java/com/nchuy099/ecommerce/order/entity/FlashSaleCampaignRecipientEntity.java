@@ -13,12 +13,17 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "flash_sale_campaign_recipients", uniqueConstraints = @UniqueConstraint(
         name = "uk_flash_sale_campaign_recipient",
         columnNames = {"campaign_id", "user_id"}
 ))
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class FlashSaleCampaignRecipientEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -42,9 +47,6 @@ public class FlashSaleCampaignRecipientEntity {
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
-
-    protected FlashSaleCampaignRecipientEntity() {
-    }
 
     public FlashSaleCampaignRecipientEntity(Long campaignId, Long userId) {
         this.campaignId = campaignId;
@@ -71,19 +73,4 @@ public class FlashSaleCampaignRecipientEntity {
         updatedAt = Instant.now();
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public Long getCampaignId() {
-        return campaignId;
-    }
-
-    public Long getUserId() {
-        return userId;
-    }
-
-    public FlashSaleRecipientStatus getStatus() {
-        return status;
-    }
 }

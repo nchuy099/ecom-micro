@@ -39,6 +39,8 @@ notification:
   mock:
     fail-campaign-ids: ${NOTIFICATION_FAIL_CAMPAIGN_IDS:}
     fail-channels: ${NOTIFICATION_FAIL_CHANNELS:}
+  push:
+    rate-per-second: ${NOTIFICATION_PUSH_RATE_PER_SECOND:100}
 
 management:
   endpoints:

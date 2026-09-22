@@ -13,9 +13,14 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import com.nchuy099.ecommerce.product.exception.BusinessException;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "products")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ProductEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -45,9 +50,6 @@ public class ProductEntity {
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
-
-    protected ProductEntity() {
-    }
 
     public ProductEntity(String name, String sku, BigDecimal price, Integer stock, Long categoryId) {
         this.name = name;
@@ -84,59 +86,24 @@ public class ProductEntity {
         stock += quantity;
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public String getName() {
-        return name;
-    }
-
     public void setName(String name) {
         this.name = name;
-    }
-
-    public String getSku() {
-        return sku;
     }
 
     public void setSku(String sku) {
         this.sku = sku;
     }
 
-    public BigDecimal getPrice() {
-        return price;
-    }
-
     public void setPrice(BigDecimal price) {
         this.price = price;
-    }
-
-    public Integer getStock() {
-        return stock;
     }
 
     public void setStock(Integer stock) {
         this.stock = stock;
     }
 
-    public Long getCategoryId() {
-        return categoryId;
-    }
-
     public void setCategoryId(Long categoryId) {
         this.categoryId = categoryId;
     }
 
-    public Long getVersion() {
-        return version;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
-
-    public Instant getUpdatedAt() {
-        return updatedAt;
-    }
 }

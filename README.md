@@ -1,8 +1,9 @@
 # Ecom Microservice
 
-E-commerce backend built as a Spring Boot microservice system. The project
-covers catalog management, customer orders, authentication, synchronous stock
-reservation, flash sales and notification delivery.
+E-commerce backend built as a Spring Boot microservice system with dedicated
+Auth, Product, Order and Notification services. The project covers catalog
+management, customer orders, authentication, synchronous stock reservation,
+flash sales and high-volume notification delivery.
 
 ## Services
 
@@ -13,7 +14,7 @@ reservation, flash sales and notification delivery.
 | `auth-service` | Keycloak integration plus user profiles, roles, tiers and search |
 | `product-service` | Product catalog, cache and stock reservations |
 | `order-service` | Orders, idempotency, synchronous stock reservation and flash sales |
-| `notification-service` | Notification delivery, channel fan-out and DLQ replay |
+| `notification-service` | Business-event to task conversion, notification workers, rate limiting and DLQ replay |
 
 ## Architecture
 
@@ -22,7 +23,8 @@ tables share the `auth_service` schema; the other services keep separate schemas
 The local Docker stack runs one MySQL container, one Redis
 instance, Kafka and Keycloak. Each service owns its local
 `application.yml`; environment variables provide deployment-specific values.
-Eureka provides service discovery for the gateway and domain services.
+Eureka provides service discovery for the gateway and domain services, while
+Keycloak centralizes identity management and secure service access.
 
 ```text
                     +------------------------+
@@ -64,86 +66,47 @@ Each service keeps its configuration in `src/main/resources/application.yml`.
 Values still use environment placeholders, so deployment settings override the
 local defaults after a service restart.
 
-Notification workers retry provider failures, store them in a DLQ and expose
-replay through the notification admin API.
+Notification processing has two separate paths. Confirmed orders publish a
+small business event to `order.events`; notification-service converts it into
+email, push and SMS work items on `notification.tasks`. Flash-sale campaigns
+generate bulk push work items directly on `notification.tasks`, using the
+12-partition priority lanes and a Push provider rate limiter. Both paths retry
+temporary provider failures through `notification.retry`, persist failures in
+the notification DLQ and expose replay through the notification admin API.
 
-## Prerequisites
+## Core Workflows
 
-- Java 17
-- Docker and Docker Compose
+- Dedicated Auth, Product, Order and Notification microservices with Eureka,
+  Keycloak JWT authentication and role-based access control.
+- Redis caching and Elasticsearch product search with cache invalidation and
+  manual reindexing.
+- Database optimization through N+1 query elimination, composite indexes,
+  batched loading and keyset pagination.
+- Redis Lua flash-sale purchase gate and distributed locks for concurrent
+  purchase control and inventory consistency.
+- Kafka-based asynchronous notifications: `order.events` become prioritized
+  `notification.tasks` with retry, DLQ and provider rate limiting.
+- Admin flash-sale campaigns publish bulk push tasks 15 minutes before launch,
+  processed independently from core order workloads.
 
-## Build and Test
+## Build, Test & Run
 
-Each service is an independent Gradle project with its own wrapper and build
-configuration. Run one service from its directory:
+Prerequisites: Java 17, Docker and Docker Compose.
 
 ```bash
-cd order-service
-./gradlew build
-```
+# Build and test one service
+cd order-service && ./gradlew build
 
-Build every service from the repository root:
-
-```bash
+# Build all services from the repository root
 for service in service-registry api-gateway auth-service product-service order-service notification-service; do
   (cd "$service" && ./gradlew build)
 done
-```
 
-Run a service or its tests from that service directory:
-
-```bash
-./gradlew bootRun
-./gradlew test
-```
-
-## Docker Stack
-
-Start the complete stack, including Eureka, Gateway and every application
-service:
-
-```bash
+# Start the full local stack
 docker compose up --build -d
 docker compose ps
 ```
 
-Application ports are published to the host: Eureka `8761`, Gateway `8282`,
-Auth/User `8080`, Product `8082`, Order `8083` and Notification `8084`.
-Services use Docker DNS internally; no local
-`./gradlew bootRun` process is required.
-
-Infrastructure is also available from the host: MySQL `13306`, Redis `16379`,
-Kafka `9092`, Elasticsearch `9200`, and Keycloak `8090`. MySQL and Redis use non-default host ports
-to avoid colliding with local installations; containers still use `mysql:3306`
-and `redis:6379` internally.
-
-Check the stack health:
-
-```bash
-docker compose ps
-curl http://localhost:8282/actuator/health
-```
-
-Restart an affected service after changing its environment or local config. To
-stop the stack, run `docker compose down`; add `-v` only when local MySQL data
-should also be removed.
-
-The isolated smoke environment is defined in `docker/compose.smoke.yml` and uses
-high localhost ports so it does not collide with the normal local stack.
-
-## Core Workflows
-
-- Product CRUD with cache invalidation and stock reservation.
-- Synchronous order placement with pessimistic product-row locking and reservation compensation.
-- Elasticsearch-backed product search with an admin-only manual reindex endpoint.
-- Cursor-based product and order pagination, while preserving legacy page parameters.
-- Composite database indexes and batched order-item loading to avoid N+1 queries.
-- Idempotent order creation through `Idempotency-Key`.
-- Resilience4j retry and circuit breaker around Product Service calls.
-- Redis token-bucket rate limiting at the gateway.
-- Redis Lua flash-sale purchase gate that caps successful orders at campaign
-  stock.
-- Redis-backed distributed campaign locks coordinate flash-sale requests across
-  order-service instances.
-- Confirmed orders publish notification requests to Kafka; notification workers
-  fan out across channels with retries, DLQ storage and replay.
+Run individual tests with `./gradlew test`; stop the stack with
+`docker compose down`. The isolated smoke stack is available at
+`docker/compose.smoke.yml`.

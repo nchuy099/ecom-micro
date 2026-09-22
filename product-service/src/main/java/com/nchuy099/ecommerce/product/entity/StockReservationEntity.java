@@ -9,9 +9,14 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "stock_reservation")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class StockReservationEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -35,9 +40,6 @@ public class StockReservationEntity {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    protected StockReservationEntity() {
-    }
-
     public StockReservationEntity(Long orderId, Long userId, Long productId, Integer quantity) {
         this.orderId = orderId;
         this.userId = userId;
@@ -50,26 +52,6 @@ public class StockReservationEntity {
         if (createdAt == null) {
             createdAt = Instant.now();
         }
-    }
-
-    public Long getOrderId() {
-        return orderId;
-    }
-
-    public Long getUserId() {
-        return userId;
-    }
-
-    public Long getProductId() {
-        return productId;
-    }
-
-    public Integer getQuantity() {
-        return quantity;
-    }
-
-    public boolean isReleased() {
-        return released;
     }
 
     public void markReleased() {

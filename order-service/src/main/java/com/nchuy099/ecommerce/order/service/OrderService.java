@@ -20,6 +20,7 @@ import com.nchuy099.ecommerce.order.exception.BusinessException;
 import com.nchuy099.ecommerce.order.repository.OrderRepository;
 import com.nchuy099.ecommerce.order.pagination.OrderCursor;
 import com.nchuy099.ecommerce.order.notification.OrderNotificationPublisher;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -30,19 +31,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor(onConstructor_ = @Autowired)
 public class OrderService {
 
     private final OrderRepository orderRepository;
     private final ProductClient productClient;
     private final OrderNotificationPublisher notificationPublisher;
-
-    @Autowired
-    public OrderService(OrderRepository orderRepository, ProductClient productClient,
-                        OrderNotificationPublisher notificationPublisher) {
-        this.orderRepository = orderRepository;
-        this.productClient = productClient;
-        this.notificationPublisher = notificationPublisher;
-    }
 
     // Keeps focused unit tests independent from Kafka while Spring uses the producer-backed constructor.
     public OrderService(OrderRepository orderRepository, ProductClient productClient) {

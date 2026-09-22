@@ -11,10 +11,12 @@ import com.nchuy099.ecommerce.order.dto.OrderResponse;
 import com.nchuy099.ecommerce.order.entity.FlashSaleCampaignEntity;
 import com.nchuy099.ecommerce.order.exception.BusinessException;
 import com.nchuy099.ecommerce.order.repository.FlashSaleCampaignRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
+@RequiredArgsConstructor(onConstructor_ = @Autowired)
 public class FlashSaleService {
     private static final int PURCHASE_QUANTITY = 1;
 
@@ -23,21 +25,6 @@ public class FlashSaleService {
     private final OrderService orderService;
     private final Clock clock;
     private final FlashSaleDistributedLock distributedLock;
-
-    @Autowired
-    public FlashSaleService(
-            FlashSaleCampaignRepository campaignRepository,
-            FlashSalePurchaseGate purchaseGate,
-            OrderService orderService,
-            Clock clock,
-            FlashSaleDistributedLock distributedLock
-    ) {
-        this.campaignRepository = campaignRepository;
-        this.purchaseGate = purchaseGate;
-        this.orderService = orderService;
-        this.clock = clock;
-        this.distributedLock = distributedLock;
-    }
 
     // Keeps focused unit tests independent from Redis while Spring uses the distributed lock bean.
     public FlashSaleService(

@@ -14,6 +14,9 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(
@@ -23,6 +26,8 @@ import jakarta.persistence.UniqueConstraint;
                 columnNames = {"campaign_id", "user_id", "channel"}
         )
 )
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class NotificationDeliveryEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -59,9 +64,6 @@ public class NotificationDeliveryEntity {
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
-
-    protected NotificationDeliveryEntity() {
-    }
 
     public NotificationDeliveryEntity(String campaignId, Long userId, NotificationChannel channel, String subject, String message) {
         this.campaignId = campaignId;
@@ -101,41 +103,5 @@ public class NotificationDeliveryEntity {
 
     public boolean isSent() {
         return status == NotificationDeliveryStatus.SENT;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public String getCampaignId() {
-        return campaignId;
-    }
-
-    public Long getUserId() {
-        return userId;
-    }
-
-    public NotificationChannel getChannel() {
-        return channel;
-    }
-
-    public NotificationDeliveryStatus getStatus() {
-        return status;
-    }
-
-    public Integer getAttempts() {
-        return attempts;
-    }
-
-    public String getLastError() {
-        return lastError;
-    }
-
-    public String getSubject() {
-        return subject;
-    }
-
-    public String getMessage() {
-        return message;
     }
 }

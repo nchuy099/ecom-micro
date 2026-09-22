@@ -11,24 +11,16 @@ import com.nchuy099.ecommerce.order.entity.FlashSaleCampaignRecipientEntity;
 import com.nchuy099.ecommerce.order.exception.BusinessException;
 import com.nchuy099.ecommerce.order.repository.FlashSaleCampaignRecipientRepository;
 import com.nchuy099.ecommerce.order.repository.FlashSaleCampaignRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@RequiredArgsConstructor
 public class FlashSaleCampaignService {
     private final FlashSaleCampaignRepository campaignRepository;
     private final FlashSaleCampaignRecipientRepository recipientRepository;
     private final Clock clock;
-
-    public FlashSaleCampaignService(
-            FlashSaleCampaignRepository campaignRepository,
-            FlashSaleCampaignRecipientRepository recipientRepository,
-            Clock clock
-    ) {
-        this.campaignRepository = campaignRepository;
-        this.recipientRepository = recipientRepository;
-        this.clock = clock;
-    }
 
     @Transactional
     public FlashSaleCampaignResponse create(CreateFlashSaleCampaignRequest request) {

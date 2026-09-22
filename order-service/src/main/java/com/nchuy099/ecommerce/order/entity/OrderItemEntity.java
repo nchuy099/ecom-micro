@@ -13,9 +13,14 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "order_items")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class OrderItemEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -43,9 +48,6 @@ public class OrderItemEntity {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    protected OrderItemEntity() {
-    }
-
     public OrderItemEntity(OrderEntity order, Long productId, String productName, Integer quantity, BigDecimal unitPrice, BigDecimal subtotal) {
         this.order = order;
         this.productId = productId;
@@ -72,39 +74,8 @@ public class OrderItemEntity {
         }
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public OrderEntity getOrder() {
-        return order;
-    }
-
     public void setOrder(OrderEntity order) {
         this.order = order;
     }
 
-    public Long getProductId() {
-        return productId;
-    }
-
-    public String getProductName() {
-        return productName;
-    }
-
-    public Integer getQuantity() {
-        return quantity;
-    }
-
-    public BigDecimal getUnitPrice() {
-        return unitPrice;
-    }
-
-    public BigDecimal getSubtotal() {
-        return subtotal;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
 }

@@ -5,7 +5,9 @@ import java.util.Optional;
 import com.nchuy099.ecommerce.notification.event.NotificationChannel;
 import com.nchuy099.ecommerce.notification.entity.NotificationDeliveryEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
 
+@Repository
 public interface NotificationDeliveryRepository extends JpaRepository<NotificationDeliveryEntity, Long> {
     Optional<NotificationDeliveryEntity> findByCampaignIdAndUserIdAndChannel(
             String campaignId,

@@ -18,9 +18,14 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import com.nchuy099.ecommerce.order.exception.BusinessException;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "orders")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class OrderEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -48,9 +53,6 @@ public class OrderEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    protected OrderEntity() {
-    }
-
     public OrderEntity(String orderNumber, Long userId, OrderStatus status, BigDecimal totalAmount) {
         this.orderNumber = orderNumber;
         this.userId = userId;
@@ -77,36 +79,16 @@ public class OrderEntity {
         item.setOrder(this);
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public String getOrderNumber() {
-        return orderNumber;
-    }
-
     public void setOrderNumber(String orderNumber) {
         this.orderNumber = orderNumber;
-    }
-
-    public Long getUserId() {
-        return userId;
     }
 
     public void setUserId(Long userId) {
         this.userId = userId;
     }
 
-    public OrderStatus getStatus() {
-        return status;
-    }
-
     public void setStatus(OrderStatus status) {
         this.status = status;
-    }
-
-    public BigDecimal getTotalAmount() {
-        return totalAmount;
     }
 
     public void setTotalAmount(BigDecimal totalAmount) {
@@ -124,19 +106,8 @@ public class OrderEntity {
                 ));
     }
 
-    public List<OrderItemEntity> getItems() {
-        return items;
-    }
-
     public void setItems(List<OrderItemEntity> items) {
         this.items = items;
     }
 
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
-
-    public Instant getUpdatedAt() {
-        return updatedAt;
-    }
 }

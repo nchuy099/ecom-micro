@@ -16,7 +16,7 @@ import com.nchuy099.ecommerce.order.repository.FlashSaleCampaignRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,18 +27,18 @@ public class FlashSaleNotificationService {
     private final FlashSaleNotificationPublisher publisher;
     private final FlashSaleDistributedLock distributedLock;
     private final Clock clock;
+    private final EntityManager entityManager;
     private final Duration leadTime;
     private final int batchSize;
 
-    @PersistenceContext
-    private EntityManager entityManager;
-
+    @Autowired
     public FlashSaleNotificationService(
             FlashSaleCampaignRepository campaignRepository,
             FlashSaleCampaignRecipientRepository recipientRepository,
             FlashSaleNotificationPublisher publisher,
             FlashSaleDistributedLock distributedLock,
             Clock clock,
+            EntityManager entityManager,
             @Value("${flash-sale.notification.lead-time:15m}") Duration leadTime,
             @Value("${flash-sale.notification.batch-size:1000}") int batchSize
     ) {
@@ -47,8 +47,23 @@ public class FlashSaleNotificationService {
         this.publisher = publisher;
         this.distributedLock = distributedLock;
         this.clock = clock;
+        this.entityManager = entityManager;
         this.leadTime = leadTime;
         this.batchSize = Math.max(1, batchSize);
+    }
+
+    // Keeps focused unit tests independent from a JPA EntityManager.
+    public FlashSaleNotificationService(
+            FlashSaleCampaignRepository campaignRepository,
+            FlashSaleCampaignRecipientRepository recipientRepository,
+            FlashSaleNotificationPublisher publisher,
+            FlashSaleDistributedLock distributedLock,
+            Clock clock,
+            Duration leadTime,
+            int batchSize
+    ) {
+        this(campaignRepository, recipientRepository, publisher, distributedLock, clock,
+                null, leadTime, batchSize);
     }
 
     @Transactional

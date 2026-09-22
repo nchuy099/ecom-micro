@@ -13,9 +13,14 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "notification_dlq")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class NotificationDlqEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -56,9 +61,6 @@ public class NotificationDlqEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    protected NotificationDlqEntity() {
-    }
-
     public NotificationDlqEntity(
             String campaignId,
             Long userId,
@@ -98,51 +100,4 @@ public class NotificationDlqEntity {
         status = NotificationDlqStatus.REPLAYED;
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public String getCampaignId() {
-        return campaignId;
-    }
-
-    public Long getUserId() {
-        return userId;
-    }
-
-    public NotificationChannel getChannel() {
-        return channel;
-    }
-
-    public String getSubject() {
-        return subject;
-    }
-
-    public String getMessage() {
-        return message;
-    }
-
-    public String getPayload() {
-        return payload;
-    }
-
-    public String getFailureReason() {
-        return failureReason;
-    }
-
-    public Integer getAttempts() {
-        return attempts;
-    }
-
-    public NotificationDlqStatus getStatus() {
-        return status;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
-
-    public Instant getUpdatedAt() {
-        return updatedAt;
-    }
 }

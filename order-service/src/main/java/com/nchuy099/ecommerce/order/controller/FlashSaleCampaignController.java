@@ -5,6 +5,7 @@ import com.nchuy099.ecommerce.order.dto.CreateFlashSaleCampaignRequest;
 import com.nchuy099.ecommerce.order.dto.FlashSaleCampaignResponse;
 import com.nchuy099.ecommerce.order.service.FlashSaleCampaignService;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -14,12 +15,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/v1/flashsale/campaigns")
+@RequiredArgsConstructor
 public class FlashSaleCampaignController {
     private final FlashSaleCampaignService campaignService;
-
-    public FlashSaleCampaignController(FlashSaleCampaignService campaignService) {
-        this.campaignService = campaignService;
-    }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)

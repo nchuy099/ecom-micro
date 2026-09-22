@@ -11,9 +11,14 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "flash_sale_campaigns")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class FlashSaleCampaignEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -48,9 +53,6 @@ public class FlashSaleCampaignEntity {
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
-
-    protected FlashSaleCampaignEntity() {
-    }
 
     public FlashSaleCampaignEntity(Long productId, Integer stock, Instant startsAt, Instant endsAt,
                                    BigDecimal promoPrice, Integer maxPerUser) {
@@ -88,47 +90,4 @@ public class FlashSaleCampaignEntity {
         return !instant.isBefore(startsAt) && instant.isBefore(endsAt);
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public Long getProductId() {
-        return productId;
-    }
-
-    public Integer getStock() {
-        return stock;
-    }
-
-    public Instant getStartsAt() {
-        return startsAt;
-    }
-
-    public Instant getEndsAt() {
-        return endsAt;
-    }
-
-    public BigDecimal getPromoPrice() {
-        return promoPrice;
-    }
-
-    public Integer getMaxPerUser() {
-        return maxPerUser;
-    }
-
-    public String getNotificationSubject() {
-        return notificationSubject;
-    }
-
-    public String getNotificationMessage() {
-        return notificationMessage;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
-
-    public Instant getUpdatedAt() {
-        return updatedAt;
-    }
 }
