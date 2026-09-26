@@ -1,0 +1,10 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: ecom_micro_order_service
+  datasource:
+    url: jdbc:mysql://localhost:3306/ecom_micro_orders
+    username: root
+    password: password
