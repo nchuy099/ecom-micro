@@ -13,8 +13,5 @@ public class CreateOrderItemReq {
     private String productId;
     @NotNull
     @Positive
-    private Integer price;
-    @NotNull
-    @Positive
     private Integer quantity;
 }
