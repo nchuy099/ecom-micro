@@ -1,6 +1,7 @@
 package com.nchuy099.ecom_micro_product_service.service.impl;
 
 import com.nchuy099.ecom_micro_product_service.dto.request.CreateProductReq;
+import com.nchuy099.ecom_micro_product_service.dto.request.LockProductItem;
 import com.nchuy099.ecom_micro_product_service.dto.request.LockProductReq;
 import com.nchuy099.ecom_micro_product_service.dto.request.ProductFilter;
 import com.nchuy099.ecom_micro_product_service.entity.ProductEntity;
@@ -10,21 +11,28 @@ import com.nchuy099.ecom_micro_product_service.repository.CategoryRepository;
 import com.nchuy099.ecom_micro_product_service.repository.ProductRepository;
 import com.nchuy099.ecom_micro_product_service.service.ProductService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Map;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ProductServiceImpl implements ProductService {
 
     private final CategoryRepository categoryRepository;
 
     private final ProductRepository productRepository;
     private final ProductMapper productMapper;
+    private final RedissonClient redissonClient;
 
     @Override
     public ProductEntity create(CreateProductReq req) {
@@ -39,31 +47,67 @@ public class ProductServiceImpl implements ProductService {
 
     }
 
+
     @Override
     @Transactional
     public void lock(LockProductReq lockProductReq) {
-        Map<String, Integer> productIdQuantityMap = lockProductReq.getItems().stream()
-                .collect(Collectors.toMap(
-                        item -> item.getProductId(),
-                        item -> item.getQuantity(),
-                        Integer::sum));
+        List<LockProductItem> items = lockProductReq.getItems();
 
-        List<ProductEntity> products = productRepository
-                .findByIdInForUpdate(List.copyOf(productIdQuantityMap.keySet()));
+        // Sắp xếp ID để tránh deadlock giữa các request
+        List<String> sortedIds = items.stream()
+                .map(LockProductItem::getId)
+                .sorted()
+                .collect(Collectors.toList());
 
-        if (products.size() != productIdQuantityMap.size()) {
-            throw new ApplicationException("Product not found");
-        }
+        String lockKey = "lock:products:" + String.join(",", sortedIds);
+        RLock lock = redissonClient.getLock(lockKey);
 
-        products.forEach(product -> {
-            int quantity = productIdQuantityMap.get(product.getId());
-            if (product.getStock() < quantity) {
-                throw new ApplicationException("Product " + product.getId() + " not enough");
+        try {
+            // Thử lấy lock trong 10s, giữ lock trong 5s
+            if (lock.tryLock(10, 5, TimeUnit.SECONDS)) {
+                Thread.sleep(4000);
+                log.info("Acquired Redis lock for: {}", lockKey);
+
+                Map<String, Integer> productIdQuantityMap = items.stream()
+                        .collect(Collectors.toMap(
+                                LockProductItem::getId,
+                                item -> item.getQuantity(),
+                                Integer::sum));
+
+                // Lúc này không dùng findByIdInForUpdate nữa, chỉ dùng findByIdIn thường
+                List<ProductEntity> products = productRepository.findByIdIn(
+                        new ArrayList<>(productIdQuantityMap.keySet()));
+
+                if (products.isEmpty()) {
+                    throw new RuntimeException("Product not found");
+                }
+
+                // Khấu trừ tồn kho trong memory
+                products.forEach(product -> {
+                    int remainStock = product.getStock()
+                            - productIdQuantityMap.get(product.getId());
+                    if (remainStock < 0) {
+                        throw new RuntimeException("Product " + product.getId() + " is out of stock");
+                    }
+                    product.setStock(remainStock);
+                });
+
+                // Lưu xuống DB
+                productRepository.saveAll(products);
+            } else {
+                throw new RuntimeException("Server busy, please try again later");
             }
-            product.setStock(product.getStock() - quantity);
-        });
-
-        productRepository.saveAll(products);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Process interrupted");
+        } finally {
+            // Giải phóng lock
+            log.info("Waiting for unlock [{}]", lockKey);
+            if (lock.isHeldByCurrentThread()) {
+                lock.unlock();
+                log.info("Unlock success for [{}]", lockKey);
+            }
+        }
     }
 
     @Override

@@ -11,7 +11,7 @@ import lombok.Setter;
 public class LockProductItem {
 
     @NotEmpty
-    private String productId;
+    private String id;
 
     @NotNull
     @Positive
