@@ -13,6 +13,6 @@ public class AuditorConfig {
 
     @Bean
     public AuditorAware<String> auditorProvider() {
-        return () -> Optional.of("system");
+        return () -> Optional.of("nchuy099");
     }
 }

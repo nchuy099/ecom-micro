@@ -1,0 +1,140 @@
+version: '3.0'
+services:
+  mysql:
+    image: mysql:8.0
+    ports:
+      - "3309:3306"
+    environment:
+      MYSQL_DATABASE: "testing_system"
+      MYSQL_ROOT_PASSWORD: "123456789"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - keycloak-network
+
+  redis:
+    image: redis:7.0-alpine
+    container_name: mpm-handover-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+
+  # UI để quản lý Redis
+  redis-insight:
+    image: redislabs/redisinsight:1.14.0
+    container_name: redis-insight-ui
+    ports:
+      - "8001:8001"
+    volumes:
+      - redis-insight-data:/data
+    depends_on:
+      - redis
+
+  zookeeper:
+    container_name: mpm-handover-zookeeper
+    image: wurstmeister/zookeeper
+    ports:
+      - 2181:2181
+
+  kafka:
+    container_name: mpm-handover-kafka
+    image: wurstmeister/kafka
+    ports:
+      - 9092:9092
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: INSIDE://kafka:29092,OUTSIDE://127.0.0.1:9092
+      KAFKA_LISTENERS: INSIDE://:29092,OUTSIDE://:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INSIDE
+    depends_on:
+      - zookeeper
+    volumes:
+      - kafka-data:/kafka
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui-mpm-handover-10
+    ports:
+      - "8081:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+  keycloak:
+    image: quay.io/keycloak/keycloak:22.0.5
+    container_name: keycloak
+    environment:
+      KC_DB: mysql
+      KC_DB_URL_HOST: mysql
+      KC_DB_URL_PORT: 3306
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_USERNAME: root
+      KC_DB_PASSWORD: 123456789
+      KC_HOSTNAME: localhost
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: password
+
+    command: start-dev
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mysql
+    networks:
+      - keycloak-network
+  elasticsearch:
+    container_name: elasticsearch
+    image: elasticsearch:7.17.10
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=false
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    networks:
+      - optimize-network
+  logstash:
+    container_name: logstash
+    image: logstash:7.17.10
+    ports:
+      - "5044:5044"
+      - "5000:5000/tcp"
+      - "5000:5000/udp"
+    volumes:
+      - ./logstash/config/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+    environment:
+      LS_JAVA_OPTS: "-Xms256m -Xmx256m"
+    networks:
+      - optimize-network
+    depends_on:
+      - elasticsearch
+  kibana:
+    container_name: kb-container
+    image: kibana:7.17.10
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    networks:
+      - optimize-network
+    depends_on:
+      - elasticsearch
+    ports:
+      - "5601:5601"
+
+volumes:
+  mysql-data:
+  zookeeper-data:
+  kafka-data:
+  redis-data:
+  redis-insight-data:
+networks:
+  keycloak-network:
+  optimize-network:

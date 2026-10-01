@@ -2,6 +2,8 @@ package com.nchuy099.ecom_micro_order_service.service.impl;
 
 import com.nchuy099.ecom_micro_order_service.clients.ProductClient;
 import com.nchuy099.ecom_micro_order_service.dto.ProductResp;
+import com.nchuy099.ecom_micro_order_service.dto.event.OrderCreatedEvent;
+import com.nchuy099.ecom_micro_order_service.dto.event.OrderCreatedItem;
 import com.nchuy099.ecom_micro_order_service.dto.request.CreateOrderReq;
 import com.nchuy099.ecom_micro_order_service.dto.request.ProductFilter;
 import com.nchuy099.ecom_micro_order_service.entity.OrderEntity;
@@ -11,21 +13,28 @@ import com.nchuy099.ecom_micro_order_service.repository.OrderRepository;
 import com.nchuy099.ecom_micro_order_service.repository.OrderItemRepository;
 import com.nchuy099.ecom_micro_order_service.service.OrderService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.hibernate.query.Order;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class OrderServiceImpl implements OrderService {
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final ProductClient productClient;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
+    // bean ma kafka tao cho
 
     @Override
     @Transactional
@@ -71,8 +80,38 @@ public class OrderServiceImpl implements OrderService {
         }
 
         savedOrder.setTotalAmount(totalAmount);
-        orderRepository.save(savedOrder);
+        OrderEntity createdOrder = orderRepository.save(savedOrder);
         orderItemRepository.saveAll(items);
+
+        var orderCreatedEvent = OrderCreatedEvent.builder()
+                .id(createdOrder.getId())
+                .customerId(createdOrder.getCustomerId())
+                .status(createdOrder.getStatus())
+                .totalAmount(createdOrder.getTotalAmount())
+                .orderItems(items.stream()
+                        .map(item -> OrderCreatedItem.builder()
+                                .productId(item.getProductId())
+                                .quantity(item.getQuantity())
+                                .build())
+                        .toList())
+                .build();
+
+        kafkaTemplate.send("order-created", orderCreatedEvent);
+        log.info("Publish new order success to order_created");
         return savedOrder;
+    }
+
+    @Override
+    public void updateOrderStatusLocked(String orderId) {
+        Optional<OrderEntity> optOrder = orderRepository.findById(orderId);
+        if (optOrder.isEmpty()) {
+            throw new ApplicationException("Order not found");
+        }
+
+        OrderEntity order = optOrder.get();
+
+        order.setStatus("LOCKED");
+        orderRepository.save(order);
+
     }
 }

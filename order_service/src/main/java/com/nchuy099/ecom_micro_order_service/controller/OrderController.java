@@ -6,6 +6,7 @@ import com.nchuy099.ecom_micro_order_service.entity.OrderEntity;
 import com.nchuy099.ecom_micro_order_service.service.OrderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,6 +18,8 @@ public class OrderController {
 
     @PostMapping
     public ResponseEntity<BaseResponse<OrderEntity>> create(@RequestBody @Valid CreateOrderReq req) {
+
+
         return ResponseEntity.ok(new BaseResponse<>(orderService.create(req), "success"));
     }
 }
