@@ -8,3 +8,19 @@ spring:
     url: jdbc:mysql://localhost:3306/ecom_micro_products
     username: root
     password: password
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: product-service
+      auto-offset-reset: latest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer #org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.use.type.headers: false
+#        spring.json.value.default.type: com.nchuy099.ecom_micro_product_service.consumers.dto.Order
+        spring.json.trusted.packages: "*"
+
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer #org.springframework.kafka.support.serializer.JsonSerializer

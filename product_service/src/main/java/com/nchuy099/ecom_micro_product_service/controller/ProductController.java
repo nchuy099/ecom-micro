@@ -2,13 +2,13 @@ package com.nchuy099.ecom_micro_product_service.controller;
 
 import com.nchuy099.ecom_micro_product_service.dto.BaseResponse;
 import com.nchuy099.ecom_micro_product_service.dto.request.CreateProductReq;
+import com.nchuy099.ecom_micro_product_service.dto.request.LockProductReq;
 import com.nchuy099.ecom_micro_product_service.dto.request.ProductFilter;
 import com.nchuy099.ecom_micro_product_service.entity.ProductEntity;
 import com.nchuy099.ecom_micro_product_service.service.ProductService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.coyote.Response;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -28,6 +28,12 @@ public class ProductController {
     @PostMapping
     public ResponseEntity<BaseResponse<ProductEntity>> create(@RequestBody @Valid CreateProductReq req) {
         return ResponseEntity.ok(new BaseResponse<>(productService.create(req), "success" ));
+    }
+
+    @PostMapping("/lock")
+    public ResponseEntity<BaseResponse<Boolean>> lock(@RequestBody @Valid LockProductReq lockProductReq) {
+        productService.lock(lockProductReq);
+        return ResponseEntity.ok(new BaseResponse<>(true, "success"));
     }
 
     @PostMapping("/search")
