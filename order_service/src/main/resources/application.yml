@@ -1,9 +1,14 @@
 server:
   port: 8080
 
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+
 spring:
   application:
-    name: ecom_micro_order_service
+    name: order-service
   datasource:
     url: jdbc:mysql://localhost:3306/ecom_micro_orders
     username: root
@@ -25,3 +30,7 @@ spring:
         spring.json.use.type.headers: false
         #        spring.json.value.default.type: com.nchuy099.ecom_micro_product_service.consumers.dto.Order
         spring.json.trusted.packages: "*"
+
+logging:
+  level:
+    org.springframework.cloud.loadbalancer.core.RoundRobinLoadBalancer: DEBUG
