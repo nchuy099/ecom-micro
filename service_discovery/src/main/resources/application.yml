@@ -1,0 +1,15 @@
+server:
+  port: 8761
+
+spring:
+  application:
+    name: service-discovery
+
+eureka:
+  instance:
+    hostname: localhost
+  client:
+    register-with-eureka: false # Ko tự đăng ký chính nó
+    fetch-registry: false       # Ko tải danh sách đăng ký từ service  khác
+    service-url:  # địa chỉ các service đăng kí eureka
+      defaultZone: http://${eureka.instance.hostname}:${server.port}/eureka/
