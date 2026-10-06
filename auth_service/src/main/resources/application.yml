@@ -1,0 +1,13 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: auth-service
+
+keycloak:
+  auth-server-url: ${KEYCLOAK_AUTH_SERVER_URL:http://localhost:8080}
+  realm: ${KEYCLOAK_REALM:ecom-micro}
+  resource: ${KEYCLOAK_CLIENT_ID:backend}
+  credentials:
+    secret: ${KEYCLOAK_CLIENT_SECRET:}
