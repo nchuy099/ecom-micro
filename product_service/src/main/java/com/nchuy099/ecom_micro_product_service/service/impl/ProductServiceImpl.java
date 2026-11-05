@@ -15,6 +15,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +38,7 @@ public class ProductServiceImpl implements ProductService {
     private final ProductRepository productRepository;
     private final ProductMapper productMapper;
     private final RedissonClient redissonClient;
+    private final CacheManager cacheManager;
 
     @Override
     public ProductEntity create(CreateProductReq req) {
@@ -50,6 +55,7 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "products", key = "#id")
     public ProductEntity update(String id, UpdateProductReq req) {
         var product = productRepository.findById(id)
                 .orElseThrow(() -> new ApplicationException("Product not found"));
@@ -73,6 +79,7 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    @Cacheable(value = "products", key = "#id")
     public ProductEntity getById(String id) {
         log.info("Getting product from database: {}", id);
         return productRepository.findById(id)
@@ -127,6 +134,11 @@ public class ProductServiceImpl implements ProductService {
                 // Lưu xuống DB
                 productRepository.saveAll(products);
 
+                // Chỉ invalidate cache của các product vừa thay đổi tồn kho
+                Cache productCache = cacheManager.getCache("products");
+                if (productCache != null) {
+                    productIdQuantityMap.keySet().forEach(productCache::evict);
+                }
             } else {
                 throw new RuntimeException("Server busy, please try again later");
             }

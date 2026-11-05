@@ -20,6 +20,12 @@ spring:
       host: localhost
       port: 6380
 
+  cache:
+    type: redis
+    redis:
+      time-to-live: 60000
+      cache-null-values: false
+
   kafka:
     bootstrap-servers: localhost:9092
     consumer:
@@ -35,3 +41,8 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer #org.springframework.kafka.support.serializer.JsonSerializer
+
+logging:
+  level:
+    org.springframework.cache: TRACE
+    org.springframework.data.redis: DEBUG
