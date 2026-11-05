@@ -14,7 +14,6 @@ import com.nchuy099.ecom_micro_order_service.repository.OrderItemRepository;
 import com.nchuy099.ecom_micro_order_service.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.hibernate.query.Order;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,6 +38,8 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public OrderEntity create(CreateOrderReq req) {
+        log.info("order.create.start customerId={} itemCount={}",
+                req.getCustomerId(), req.getItems().size());
         var productFilter = new ProductFilter();
         productFilter.setIds(req.getItems().stream()
                 .map(item -> item.getProductId())
@@ -48,25 +49,32 @@ public class OrderServiceImpl implements OrderService {
         Map<String, ProductResp> products = productClient.getProductsByIds(productFilter)
                 .stream()
                 .collect(Collectors.toMap(ProductResp::getId, Function.identity()));
+        log.info("order.products.loaded customerId={} requestedProducts={} foundProducts={}",
+                req.getCustomerId(), productFilter.getIds().size(), products.size());
 
         for (var item : req.getItems()) {
             var product = products.get(item.getProductId());
             if (product == null) {
+                log.warn("order.validation.failed reason=product_not_found productId={}", item.getProductId());
                 throw new ApplicationException("Product " + item.getProductId() + " not found");
             }
             if (item.getQuantity() > product.getStock()) {
+                log.warn("order.validation.failed reason=insufficient_stock productId={} requested={} available={}",
+                        item.getProductId(), item.getQuantity(), product.getStock());
                 throw new ApplicationException("Product " + item.getProductId() + " not enough");
             }
         }
+        log.info("order.validation.completed customerId={}", req.getCustomerId());
 
         int totalAmount = 0;
         List<OrderItemEntity> items = new ArrayList<>();
         var order = OrderEntity.builder()
                 .customerId(req.getCustomerId())
-                .status("NEW")
+                .status("PENDING_STOCK")
                 .totalAmount(0)
                 .build();
         var savedOrder = orderRepository.save(order);
+        log.info("order.persisted orderId={} status={}", savedOrder.getId(), savedOrder.getStatus());
 
         for (var item : req.getItems()) {
             var product = products.get(item.getProductId());
@@ -82,6 +90,8 @@ public class OrderServiceImpl implements OrderService {
         savedOrder.setTotalAmount(totalAmount);
         OrderEntity createdOrder = orderRepository.save(savedOrder);
         orderItemRepository.saveAll(items);
+        log.info("order.items.persisted orderId={} itemCount={} totalAmount={}",
+                createdOrder.getId(), items.size(), createdOrder.getTotalAmount());
 
         var orderCreatedEvent = OrderCreatedEvent.builder()
                 .id(createdOrder.getId())
@@ -96,22 +106,43 @@ public class OrderServiceImpl implements OrderService {
                         .toList())
                 .build();
 
-        kafkaTemplate.send("order-created", orderCreatedEvent);
-        log.info("Publish new order success to order_created");
+        kafkaTemplate.send("order-created", createdOrder.getId(), orderCreatedEvent).whenComplete((result, error) -> {
+            if (error != null) {
+                log.error("order.event.publish.failed orderId={} topic=order-created", createdOrder.getId(), error);
+            } else {
+                log.info("order.event.published orderId={} topic=order-created", createdOrder.getId());
+            }
+        });
+        log.info("order.create.completed orderId={} status={}", createdOrder.getId(), createdOrder.getStatus());
         return savedOrder;
     }
 
     @Override
     public void updateOrderStatusLocked(String orderId) {
         Optional<OrderEntity> optOrder = orderRepository.findById(orderId);
-        if (optOrder.isEmpty()) {
-            throw new ApplicationException("Order not found");
-        }
+        optOrder.ifPresent(order -> {
+            if ("PENDING_STOCK".equals(order.getStatus())) {
+                order.setStatus("PENDING_PAYMENT");
+                orderRepository.save(order);
+            }
+        });
+    }
 
-        OrderEntity order = optOrder.get();
+    @Override @Transactional
+    public void confirm(String orderId) { transition(orderId, "PENDING_PAYMENT", "CONFIRMED"); }
 
-        order.setStatus("LOCKED");
-        orderRepository.save(order);
+    @Override @Transactional
+    public void cancel(String orderId) {
+        orderRepository.findById(orderId).ifPresent(order -> {
+            if (!"CONFIRMED".equals(order.getStatus()) && !"CANCELLED".equals(order.getStatus())) {
+                order.setStatus("CANCELLED"); orderRepository.save(order);
+            }
+        });
+    }
 
+    private void transition(String id, String from, String to) {
+        orderRepository.findById(id).ifPresent(order -> {
+            if (from.equals(order.getStatus())) { order.setStatus(to); orderRepository.save(order); }
+        });
     }
 }

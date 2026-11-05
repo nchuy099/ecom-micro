@@ -49,16 +49,17 @@ public class ProductServiceImpl implements ProductService {
         }
 
         ProductEntity creatingProduct = productMapper.fromCreateProduct(req);
-        return  productRepository.save(creatingProduct);
-
+        return productRepository.save(creatingProduct);
     }
 
     @Override
     @Transactional
     @CacheEvict(value = "products", key = "#id")
     public ProductEntity update(String id, UpdateProductReq req) {
-        var product = productRepository.findById(id)
-                .orElseThrow(() -> new ApplicationException("Product not found"));
+        var product =
+                productRepository
+                        .findById(id)
+                        .orElseThrow(() -> new ApplicationException("Product not found"));
 
         if (req.getName() != null) {
             product.setName(req.getName());
@@ -70,7 +71,8 @@ public class ProductServiceImpl implements ProductService {
             product.setStock(req.getStock());
         }
         if (req.getCategoryId() != null) {
-            categoryRepository.findById(req.getCategoryId())
+            categoryRepository
+                    .findById(req.getCategoryId())
                     .orElseThrow(() -> new ApplicationException("Category not found"));
             product.setCategoryId(req.getCategoryId());
         }
@@ -82,21 +84,20 @@ public class ProductServiceImpl implements ProductService {
     @Cacheable(value = "products", key = "#id")
     public ProductEntity getById(String id) {
         log.info("Getting product from database: {}", id);
-        return productRepository.findById(id)
+        return productRepository
+                .findById(id)
                 .orElseThrow(() -> new ApplicationException("Product not found"));
     }
-
 
     @Override
     @Transactional
     public void lock(LockProductReq lockProductReq) {
         List<LockProductItem> items = lockProductReq.getItems();
+        log.info("product.stock.lock.start productCount={}", items.size());
 
         // Sắp xếp ID để tránh deadlock giữa các request
-        List<String> sortedIds = items.stream()
-                .map(LockProductItem::getId)
-                .sorted()
-                .collect(Collectors.toList());
+        List<String> sortedIds =
+                items.stream().map(LockProductItem::getId).sorted().collect(Collectors.toList());
 
         String lockKey = "lock:products:" + String.join(",", sortedIds);
         RLock lock = redissonClient.getLock(lockKey);
@@ -105,34 +106,43 @@ public class ProductServiceImpl implements ProductService {
             // Thử lấy lock trong 10s, giữ lock trong 5s
             if (lock.tryLock(10, 5, TimeUnit.SECONDS)) {
                 Thread.sleep(4000);
-                log.info("Acquired Redis lock for: {}", lockKey);
+                log.info("product.redis.lock.acquired lockKey={}", lockKey);
 
-                Map<String, Integer> productIdQuantityMap = items.stream()
-                        .collect(Collectors.toMap(
-                                LockProductItem::getId,
-                                item -> item.getQuantity(),
-                                Integer::sum));
+                Map<String, Integer> productIdQuantityMap =
+                        items.stream()
+                                .collect(
+                                        Collectors.toMap(
+                                                LockProductItem::getId,
+                                                item -> item.getQuantity(),
+                                                Integer::sum));
 
                 // Lúc này không dùng findByIdInForUpdate nữa, chỉ dùng findByIdIn thường
-                List<ProductEntity> products = productRepository.findByIdIn(
-                        new ArrayList<>(productIdQuantityMap.keySet()));
+                List<ProductEntity> products =
+                        productRepository.findByIdIn(
+                                new ArrayList<>(productIdQuantityMap.keySet()));
 
                 if (products.isEmpty()) {
                     throw new RuntimeException("Product not found");
                 }
 
                 // Khấu trừ tồn kho trong memory
-                products.forEach(product -> {
-                    int remainStock = product.getStock()
-                            - productIdQuantityMap.get(product.getId());
-                    if (remainStock < 0) {
-                        throw new RuntimeException("Product " + product.getId() + " is out of stock");
-                    }
-                    product.setStock(remainStock);
-                });
+                products.forEach(
+                        product -> {
+                            int remainStock =
+                                    product.getStock() - productIdQuantityMap.get(product.getId());
+                            if (remainStock < 0) {
+                                throw new RuntimeException(
+                                        "Product " + product.getId() + " is out of stock");
+                            }
+                            product.setStock(remainStock);
+                        });
 
                 // Lưu xuống DB
                 productRepository.saveAll(products);
+                log.info(
+                        "product.stock.updated productCount={} lockKey={}",
+                        products.size(),
+                        lockKey);
 
                 // Chỉ invalidate cache của các product vừa thay đổi tồn kho
                 Cache productCache = cacheManager.getCache("products");
@@ -140,17 +150,20 @@ public class ProductServiceImpl implements ProductService {
                     productIdQuantityMap.keySet().forEach(productCache::evict);
                 }
             } else {
+                log.warn("product.stock.lock.failed reason=server_busy lockKey={}", lockKey);
                 throw new RuntimeException("Server busy, please try again later");
             }
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
+            log.error(
+                    "product.stock.lock.failed reason=interrupted lockKey={}", lockKey, exception);
             throw new RuntimeException("Process interrupted");
         } finally {
             // Giải phóng lock
-            log.info("Waiting for unlock [{}]", lockKey);
+            log.info("product.redis.lock.releasing lockKey={}", lockKey);
             if (lock.isHeldByCurrentThread()) {
                 lock.unlock();
-                log.info("Unlock success for [{}]", lockKey);
+                log.info("product.redis.lock.released lockKey={}", lockKey);
             }
         }
     }

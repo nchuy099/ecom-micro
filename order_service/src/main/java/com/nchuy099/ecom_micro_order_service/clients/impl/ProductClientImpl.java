@@ -6,6 +6,7 @@ import com.nchuy099.ecom_micro_order_service.dto.ProductResp;
 import com.nchuy099.ecom_micro_order_service.dto.request.ProductFilter;
 import com.nchuy099.ecom_micro_order_service.exception.ApplicationException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
@@ -15,11 +16,13 @@ import java.util.List;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class ProductClientImpl implements ProductClient {
 
     private final WebClient.Builder webClientBuilder;
     @Override
     public List<ProductResp> getProductsByIds(ProductFilter productFilter) {
+        log.info("order.product.lookup.start productCount={}", productFilter.getIds().size());
 //        WebClient.Builder builder = WebClient.builder();
         BaseResponse<List<ProductResp>> response = webClientBuilder.build()
                     .post()
@@ -31,9 +34,11 @@ public class ProductClientImpl implements ProductClient {
                     .block();
 
         if (response == null || response.getData() == null) {
+            log.error("order.product.lookup.failed productCount={}", productFilter.getIds().size());
             throw new ApplicationException("Không thể lấy thông tin sản phẩm từ Product Service");
         }
 
+        log.info("order.product.lookup.completed productCount={}", response.getData().size());
         return response.getData();
     }
 }

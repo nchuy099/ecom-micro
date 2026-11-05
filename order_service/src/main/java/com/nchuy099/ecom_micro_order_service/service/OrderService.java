@@ -7,4 +7,6 @@ public interface OrderService {
     OrderEntity create(CreateOrderReq req);
 
     void updateOrderStatusLocked(String orderId);
+    void confirm(String orderId);
+    void cancel(String orderId);
 }
