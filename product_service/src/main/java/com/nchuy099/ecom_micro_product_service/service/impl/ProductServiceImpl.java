@@ -4,6 +4,7 @@ import com.nchuy099.ecom_micro_product_service.dto.request.CreateProductReq;
 import com.nchuy099.ecom_micro_product_service.dto.request.LockProductItem;
 import com.nchuy099.ecom_micro_product_service.dto.request.LockProductReq;
 import com.nchuy099.ecom_micro_product_service.dto.request.ProductFilter;
+import com.nchuy099.ecom_micro_product_service.dto.request.UpdateProductReq;
 import com.nchuy099.ecom_micro_product_service.entity.ProductEntity;
 import com.nchuy099.ecom_micro_product_service.exception.ApplicationException;
 import com.nchuy099.ecom_micro_product_service.mapper.ProductMapper;
@@ -45,6 +46,37 @@ public class ProductServiceImpl implements ProductService {
         ProductEntity creatingProduct = productMapper.fromCreateProduct(req);
         return  productRepository.save(creatingProduct);
 
+    }
+
+    @Override
+    @Transactional
+    public ProductEntity update(String id, UpdateProductReq req) {
+        var product = productRepository.findById(id)
+                .orElseThrow(() -> new ApplicationException("Product not found"));
+
+        if (req.getName() != null) {
+            product.setName(req.getName());
+        }
+        if (req.getPrice() != null) {
+            product.setPrice(req.getPrice());
+        }
+        if (req.getStock() != null) {
+            product.setStock(req.getStock());
+        }
+        if (req.getCategoryId() != null) {
+            categoryRepository.findById(req.getCategoryId())
+                    .orElseThrow(() -> new ApplicationException("Category not found"));
+            product.setCategoryId(req.getCategoryId());
+        }
+
+        return productRepository.save(product);
+    }
+
+    @Override
+    public ProductEntity getById(String id) {
+        log.info("Getting product from database: {}", id);
+        return productRepository.findById(id)
+                .orElseThrow(() -> new ApplicationException("Product not found"));
     }
 
 
@@ -94,6 +126,7 @@ public class ProductServiceImpl implements ProductService {
 
                 // Lưu xuống DB
                 productRepository.saveAll(products);
+
             } else {
                 throw new RuntimeException("Server busy, please try again later");
             }
