@@ -8,5 +8,5 @@ public interface OrderService {
 
     void updateOrderStatusLocked(String orderId);
     void confirm(String orderId);
-    void cancel(String orderId);
+    void cancel(String orderId, String reason);
 }

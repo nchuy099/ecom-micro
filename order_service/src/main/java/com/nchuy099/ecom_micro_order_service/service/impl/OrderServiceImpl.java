@@ -14,7 +14,7 @@ import com.nchuy099.ecom_micro_order_service.repository.OrderItemRepository;
 import com.nchuy099.ecom_micro_order_service.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.kafka.core.KafkaTemplate;
+import com.nchuy099.ecom_micro_order_service.saga.SagaOutbox;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,7 +32,7 @@ public class OrderServiceImpl implements OrderService {
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final ProductClient productClient;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final SagaOutbox outbox;
     // bean ma kafka tao cho
 
     @Override
@@ -106,43 +106,37 @@ public class OrderServiceImpl implements OrderService {
                         .toList())
                 .build();
 
-        kafkaTemplate.send("order-created", createdOrder.getId(), orderCreatedEvent).whenComplete((result, error) -> {
-            if (error != null) {
-                log.error("order.event.publish.failed orderId={} topic=order-created", createdOrder.getId(), error);
-            } else {
-                log.info("order.event.published orderId={} topic=order-created", createdOrder.getId());
-            }
-        });
+        outbox.add("order-created", createdOrder.getId(), orderCreatedEvent);
         log.info("order.create.completed orderId={} status={}", createdOrder.getId(), createdOrder.getStatus());
         return savedOrder;
     }
 
-    @Override
+    @Override @Transactional
     public void updateOrderStatusLocked(String orderId) {
-        Optional<OrderEntity> optOrder = orderRepository.findById(orderId);
-        optOrder.ifPresent(order -> {
-            if ("PENDING_STOCK".equals(order.getStatus())) {
-                order.setStatus("PENDING_PAYMENT");
-                orderRepository.save(order);
+        orderRepository.findForUpdate(orderId).ifPresent(order -> {
+            if ("PENDING_STOCK".equals(order.getStatus())) order.setStatus("PENDING_PAYMENT");
+        });
+    }
+
+    @Override @Transactional
+    public void confirm(String orderId) {
+        orderRepository.findForUpdate(orderId).ifPresent(order -> {
+            if ("PENDING_PAYMENT".equals(order.getStatus()) || "PENDING_STOCK".equals(order.getStatus())) {
+                order.setStatus("CONFIRMED");
+                outbox.add("order-confirmed", orderId, Map.of("orderId", orderId));
             }
         });
     }
 
     @Override @Transactional
-    public void confirm(String orderId) { transition(orderId, "PENDING_PAYMENT", "CONFIRMED"); }
-
-    @Override @Transactional
-    public void cancel(String orderId) {
-        orderRepository.findById(orderId).ifPresent(order -> {
-            if (!"CONFIRMED".equals(order.getStatus()) && !"CANCELLED".equals(order.getStatus())) {
-                order.setStatus("CANCELLED"); orderRepository.save(order);
+    public void cancel(String orderId, String reason) {
+        orderRepository.findForUpdate(orderId).ifPresent(order -> {
+            if (!"CANCELLED".equals(order.getStatus())) {
+                order.setStatus("CANCELLED");
+                var items = orderItemRepository.findByOrderId(orderId).stream()
+                        .map(item -> Map.of("productId", item.getProductId(), "quantity", item.getQuantity())).toList();
+                outbox.add("order-cancelled", orderId, Map.of("orderId", orderId, "reason", reason, "orderItems", items));
             }
-        });
-    }
-
-    private void transition(String id, String from, String to) {
-        orderRepository.findById(id).ifPresent(order -> {
-            if (from.equals(order.getStatus())) { order.setStatus(to); orderRepository.save(order); }
         });
     }
 }

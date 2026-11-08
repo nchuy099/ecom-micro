@@ -118,10 +118,10 @@ public class ProductServiceImpl implements ProductService {
 
                 // Lúc này không dùng findByIdInForUpdate nữa, chỉ dùng findByIdIn thường
                 List<ProductEntity> products =
-                        productRepository.findByIdIn(
+                        productRepository.findByIdInForUpdate(
                                 new ArrayList<>(productIdQuantityMap.keySet()));
 
-                if (products.isEmpty()) {
+                if (products.size() != productIdQuantityMap.size()) {
                     throw new RuntimeException("Product not found");
                 }
 

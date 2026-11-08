@@ -11,20 +11,23 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class SagaEventConsumer {
     private final OrderService orders;
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper;
 
     @KafkaListener(topics = "stock-reserved")
     public void stockReserved(String json) throws Exception {
-        orders.updateOrderStatusLocked(mapper.readTree(json).path("orderId").asText());
+        orders.updateOrderStatusLocked(mapper.readTree(json).required("orderId").asText());
     }
 
     @KafkaListener(topics = "payment-completed")
     public void paymentCompleted(String json) throws Exception {
-        orders.confirm(mapper.readTree(json).path("orderId").asText());
+        orders.confirm(mapper.readTree(json).required("orderId").asText());
     }
 
-    @KafkaListener(topics = {"stock-released", "stock-reservation-failed"})
-    public void cancelled(String json) throws Exception {
-        orders.cancel(mapper.readTree(json).path("orderId").asText());
+    @KafkaListener(topics = {"payment-failed", "stock-reservation-failed"})
+    public void failed(String json) throws Exception {
+        JsonNode event = mapper.readTree(json);
+        orders.cancel(
+                event.required("orderId").asText(),
+                event.path("reason").asText("Saga step failed"));
     }
 }
