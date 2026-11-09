@@ -2,6 +2,10 @@ server:
   port: 8282
 
 spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
   application:
     name: api-gateway
   security:
@@ -31,3 +35,8 @@ eureka:
 logging:
   level:
     root: info
+
+order:
+  rate-limit:
+    capacity: ${ORDER_RATE_LIMIT_CAPACITY:10}
+    refill-ms: ${ORDER_RATE_LIMIT_REFILL_MS:6000}

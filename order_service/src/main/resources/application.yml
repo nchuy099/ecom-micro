@@ -19,6 +19,12 @@ spring:
   sql:
     init:
       mode: always
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/ecom-micro}
+          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://localhost:8080/realms/ecom-micro/protocol/openid-connect/certs}
   application:
     name: order-service
   datasource:
