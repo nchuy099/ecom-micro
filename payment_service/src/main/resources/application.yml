@@ -1,6 +1,15 @@
 server:
   port: 8890
 spring:
+  quartz:
+    job-store-type: jdbc
+    jdbc:
+      initialize-schema: never
+    properties:
+      org.quartz.scheduler.instanceId: AUTO
+      org.quartz.jobStore.isClustered: true
+      org.quartz.jobStore.clusterCheckinInterval: ${SAGA_QUARTZ_CHECKIN_MS:10000}
+      org.quartz.jobStore.driverDelegateClass: org.quartz.impl.jdbcjobstore.StdJDBCDelegate
   sql:
     init:
       mode: always
@@ -24,3 +33,9 @@ spring:
 saga:
   payment:
     fail: false
+
+saga:
+  outbox:
+    retry-interval-ms: ${SAGA_OUTBOX_RETRY_INTERVAL_MS:10000}
+    batch-size: ${SAGA_OUTBOX_BATCH_SIZE:100}
+    send-timeout-ms: ${SAGA_OUTBOX_SEND_TIMEOUT_MS:30000}
